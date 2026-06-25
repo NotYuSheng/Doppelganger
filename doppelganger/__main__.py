@@ -64,6 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--epochs", default=None,
                    help="Override num_train_epochs: an integer, or 'auto' for the "
                         "size-based recommendation. Omit to use the config value.")
+    t.add_argument("--tensorboard", action="store_true",
+                   help="Wire a live TensorBoard dashboard (requires `pip install tensorboard`).")
 
     m = sub.add_parser("merge", help="Merge the LoRA adapter into the base model.")
     m.add_argument("--config", default=None, help="Export config (default: configs/export_lora[.local].yaml).")
@@ -92,7 +94,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return steps.audit(redact=args.redact, locales=_locales(args.redact_locales),
                            validate=not args.skip_validation)
     if args.command == "train":
-        return steps.train(config=args.config, gpus=args.gpus, epochs=args.epochs)
+        return steps.train(config=args.config, gpus=args.gpus, epochs=args.epochs,
+                           tensorboard=args.tensorboard)
     if args.command == "merge":
         return steps.merge(config=args.config, gpus=args.gpus)
     if args.command == "chat":

@@ -121,15 +121,88 @@ def _advise_epochs(cfg: dict, num_gpus: int) -> int:
     return rec
 
 
-def _config_with_epochs(cfg_path: str, epochs: float) -> str:
-    """Write a temp copy of the config with ``num_train_epochs`` overridden."""
+def _config_with_overrides(cfg_path: str, overrides: dict) -> str:
+    """Write a temp copy of the config with the given keys overridden."""
     cfg = _read_yaml(cfg_path)
-    cfg["num_train_epochs"] = float(epochs)
+    cfg.update(overrides)
     import yaml
     fd, path = tempfile.mkstemp(prefix="train_override_", suffix=".yaml")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
     return path
+
+
+def _has_tensorboard() -> bool:
+    import importlib.util
+    return importlib.util.find_spec("tensorboard") is not None
+
+
+# ── Post-training visibility ──────────────────────────────────────────────────
+# Everything here runs AFTER llamafactory-cli exits, so it has zero effect on
+# fine-tuning speed. Best-effort: any failure is swallowed.
+_SPARK = "▁▂▃▄▅▆▇█"
+
+
+def _loss_summary(log_path: str) -> Optional[str]:
+    try:
+        rows = [json.loads(l) for l in open(log_path, encoding="utf-8") if l.strip()]
+    except OSError:
+        return None
+    losses = [r["loss"] for r in rows if "loss" in r]
+    if not losses:
+        return None
+    lo, hi = min(losses), max(losses)
+    spark = "".join(
+        _SPARK[int((l - lo) / (hi - lo) * (len(_SPARK) - 1)) if hi > lo else 0]
+        for l in losses)
+    return f"loss {losses[0]:.2f} → {losses[-1]:.2f} (min {lo:.2f})  {spark}"
+
+
+def _lora_magnitudes(adapter_path: str) -> Optional[List[Tuple[str, float]]]:
+    """Relative LoRA update size per layer type, via the cheap ||B||·||A|| proxy
+    (no large B@A matmuls — keeps the summary near-instant)."""
+    try:
+        from safetensors import safe_open
+    except ImportError:
+        return None
+    if not os.path.exists(adapter_path):
+        return None
+    import collections
+    import re
+    try:
+        f = safe_open(adapter_path, "pt")
+    except Exception:
+        return None
+    a_norm, b_norm = {}, {}
+    for k in f.keys():
+        if "lora_A" in k:
+            a_norm[k.replace("lora_A", "")] = f.get_tensor(k).float().norm().item()
+        elif "lora_B" in k:
+            b_norm[k.replace("lora_B", "")] = f.get_tensor(k).float().norm().item()
+    mods: dict = collections.defaultdict(float)
+    for base, an in a_norm.items():
+        if base in b_norm:
+            m = re.search(r"(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)", base)
+            mods[m.group(1) if m else "other"] += an * b_norm[base]
+    return sorted(mods.items(), key=lambda kv: -kv[1])
+
+
+def summarize_run(output_dir: str) -> None:
+    """Print a post-training recap: loss trend, where LoRA moved, and the plot
+    path. Runs only after training exits, so it never slows fine-tuning."""
+    print("\n=== training summary ===")
+    ls = _loss_summary(os.path.join(output_dir, "trainer_log.jsonl"))
+    if ls:
+        print(ls)
+    mags = _lora_magnitudes(os.path.join(output_dir, "adapter_model.safetensors"))
+    if mags:
+        peak = max(v for _, v in mags) or 1.0
+        print("LoRA update magnitude by layer type (||B||·||A|| proxy):")
+        for name, v in mags:
+            print(f"  {name:11} {'█' * int(v / peak * 24)} {v:.1f}")
+    png = os.path.join(output_dir, "training_loss.png")
+    if os.path.exists(png):
+        print(f"loss plot: {png}")
 
 
 # ── Status (for the menu's checkmarks / out-of-order guards) ──────────────────
@@ -253,11 +326,13 @@ def _llamafactory(args: List[str], gpus: Optional[str] = None) -> int:
 
 
 def train(config: Optional[str] = None, gpus: Optional[str] = None,
-          epochs: Optional[str] = None) -> int:
+          epochs: Optional[str] = None, tensorboard: bool = False) -> int:
     """Stage 3: LoRA fine-tune via LLaMA-Factory.
 
     ``epochs`` may be ``None`` (use the config value), an integer string, or
-    ``"auto"`` (use the size-based recommendation).
+    ``"auto"`` (use the size-based recommendation). ``tensorboard`` wires a live
+    dashboard (negligible in-loop cost). A post-training summary prints after
+    llamafactory exits, so neither affects fine-tuning speed materially.
     """
     if not audit_done():
         print(f"warning: {DATASET_PATH} not found — run `parse` + `audit` (or `auto`) first.")
@@ -274,24 +349,41 @@ def train(config: Optional[str] = None, gpus: Optional[str] = None,
         return 1
     num_gpus = len(gpus.split(",")) if gpus else 1
     recommended = _advise_epochs(cfg, num_gpus)
+    output_dir = cfg.get("output_dir")
 
-    # An overridden epoch count goes through a throwaway temp config we clean up.
-    temp_cfg = None
+    overrides: dict = {}
     if epochs == "auto":
-        cfg_path = temp_cfg = _config_with_epochs(cfg_path, recommended)
+        overrides["num_train_epochs"] = float(recommended)
         print(f"[advisor] --epochs auto → training for {recommended} epoch(s).")
     elif epochs is not None:
-        cfg_path = temp_cfg = _config_with_epochs(cfg_path, float(epochs))
+        overrides["num_train_epochs"] = float(epochs)
         print(f"[advisor] --epochs {epochs} → overriding config.")
+    if tensorboard:
+        if _has_tensorboard():
+            logdir = os.path.join(output_dir or "saves", "runs")
+            overrides.update(report_to="tensorboard", logging_dir=logdir)
+            print(f"[tensorboard] live dashboard — in another terminal run:\n"
+                  f"              tensorboard --logdir {logdir}")
+        else:
+            print("[tensorboard] not installed — skipping (pip install tensorboard).")
+
+    # Overrides go through a throwaway temp config we clean up afterwards.
+    temp_cfg = None
+    if overrides:
+        cfg_path = temp_cfg = _config_with_overrides(cfg_path, overrides)
 
     try:
-        return _llamafactory(["train", cfg_path], gpus=gpus)
+        rc = _llamafactory(["train", cfg_path], gpus=gpus)
     finally:
         if temp_cfg and os.path.exists(temp_cfg):
             try:
                 os.remove(temp_cfg)
             except OSError:
                 pass
+
+    if rc == 0 and output_dir:
+        summarize_run(output_dir)  # post-training only — no effect on training speed
+    return rc
 
 
 def merge(config: Optional[str] = None, gpus: Optional[str] = None) -> int:
