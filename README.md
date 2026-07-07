@@ -352,12 +352,12 @@ Doppelganger is as much a **learning sandbox** as a tool: the aim is to explore 
 
 ## Star History
 
-<a href="https://star-history.com/#NotYuSheng/Doppelganger&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=NotYuSheng/Doppelganger&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=NotYuSheng/Doppelganger&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=NotYuSheng/Doppelganger&type=Date" />
-  </picture>
+<a href="https://www.star-history.com/?repos=NotYuSheng%2FDoppelganger&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=NotYuSheng/Doppelganger&type=date&theme=dark&legend=top-left&sealed_token=JywQW88ilZcS4ZcX-JjWYKc0sacRnFf3vhVjFrUZaCkw4SMD3eXNNKCzZn4UdeoDnK5Qrbr_LeRLNI0y-JuYIJf9rlBEi6_h8WDALghHA25Ze852kD5vDyNk5Z4J1lGyEgbFg1ur_GU_j5-0Tsb1AYJnI48KrJVU4DjgSPhROZ-NiwVKTZxYb3icvZbn" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=NotYuSheng/Doppelganger&type=date&legend=top-left&sealed_token=JywQW88ilZcS4ZcX-JjWYKc0sacRnFf3vhVjFrUZaCkw4SMD3eXNNKCzZn4UdeoDnK5Qrbr_LeRLNI0y-JuYIJf9rlBEi6_h8WDALghHA25Ze852kD5vDyNk5Z4J1lGyEgbFg1ur_GU_j5-0Tsb1AYJnI48KrJVU4DjgSPhROZ-NiwVKTZxYb3icvZbn" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=NotYuSheng/Doppelganger&type=date&legend=top-left&sealed_token=JywQW88ilZcS4ZcX-JjWYKc0sacRnFf3vhVjFrUZaCkw4SMD3eXNNKCzZn4UdeoDnK5Qrbr_LeRLNI0y-JuYIJf9rlBEi6_h8WDALghHA25Ze852kD5vDyNk5Z4J1lGyEgbFg1ur_GU_j5-0Tsb1AYJnI48KrJVU4DjgSPhROZ-NiwVKTZxYb3icvZbn" />
+ </picture>
 </a>
 
 ## License
