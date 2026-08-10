@@ -354,9 +354,9 @@ Doppelganger is as much a **learning sandbox** as a tool: the aim is to explore 
 
 <a href="https://www.star-history.com/?repos=NotYuSheng%2FDoppelganger&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=NotYuSheng/Doppelganger&type=date&theme=dark&legend=top-left&sealed_token=JywQW88ilZcS4ZcX-JjWYKc0sacRnFf3vhVjFrUZaCkw4SMD3eXNNKCzZn4UdeoDnK5Qrbr_LeRLNI0y-JuYIJf9rlBEi6_h8WDALghHA25Ze852kD5vDyNk5Z4J1lGyEgbFg1ur_GU_j5-0Tsb1AYJnI48KrJVU4DjgSPhROZ-NiwVKTZxYb3icvZbn" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=NotYuSheng/Doppelganger&type=date&legend=top-left&sealed_token=JywQW88ilZcS4ZcX-JjWYKc0sacRnFf3vhVjFrUZaCkw4SMD3eXNNKCzZn4UdeoDnK5Qrbr_LeRLNI0y-JuYIJf9rlBEi6_h8WDALghHA25Ze852kD5vDyNk5Z4J1lGyEgbFg1ur_GU_j5-0Tsb1AYJnI48KrJVU4DjgSPhROZ-NiwVKTZxYb3icvZbn" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=NotYuSheng/Doppelganger&type=date&legend=top-left&sealed_token=JywQW88ilZcS4ZcX-JjWYKc0sacRnFf3vhVjFrUZaCkw4SMD3eXNNKCzZn4UdeoDnK5Qrbr_LeRLNI0y-JuYIJf9rlBEi6_h8WDALghHA25Ze852kD5vDyNk5Z4J1lGyEgbFg1ur_GU_j5-0Tsb1AYJnI48KrJVU4DjgSPhROZ-NiwVKTZxYb3icvZbn" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=NotYuSheng/Doppelganger&type=date&theme=dark&legend=top-left&sealed_token=7WTlCPQj_XixAoCueVuof3pN192njmyJiTW5UTTt4WXbsr0wzb5LDOhZ4zkX4RJOKWAJdb8Su4oTulB-6pxabdKS_ndwqMSE3-NtIzN2_bHMoQli__dI5KlpnHbYs4vf61uhwSVz8hBqe0BaG0yVGLsQa2YBE4-Tn1MKa2yxXRUSTRGp_CDBuKdrbbLk" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=NotYuSheng/Doppelganger&type=date&legend=top-left&sealed_token=7WTlCPQj_XixAoCueVuof3pN192njmyJiTW5UTTt4WXbsr0wzb5LDOhZ4zkX4RJOKWAJdb8Su4oTulB-6pxabdKS_ndwqMSE3-NtIzN2_bHMoQli__dI5KlpnHbYs4vf61uhwSVz8hBqe0BaG0yVGLsQa2YBE4-Tn1MKa2yxXRUSTRGp_CDBuKdrbbLk" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=NotYuSheng/Doppelganger&type=date&legend=top-left&sealed_token=7WTlCPQj_XixAoCueVuof3pN192njmyJiTW5UTTt4WXbsr0wzb5LDOhZ4zkX4RJOKWAJdb8Su4oTulB-6pxabdKS_ndwqMSE3-NtIzN2_bHMoQli__dI5KlpnHbYs4vf61uhwSVz8hBqe0BaG0yVGLsQa2YBE4-Tn1MKa2yxXRUSTRGp_CDBuKdrbbLk" />
  </picture>
 </a>
 
