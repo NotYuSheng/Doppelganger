@@ -28,7 +28,7 @@
 
 Doppelganger fine-tunes large language models (like Qwen) on your own chat conversations, capturing how *you* write. Built on top of [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory), it turns a raw chat export into a [ShareGPT](https://github.com/hiyouga/LLaMA-Factory/blob/main/data/README.md)-formatted dataset for supervised fine-tuning (SFT), then trains a LoRA adapter on it.
 
-Ingestion is **source-agnostic**: a small adapter parses each platform's export into a normalized message stream, and the rest of the pipeline (sessionizing, turn-merging, sensitive-data scanning, optional quality auditing, ShareGPT formatting) is shared. **Telegram** is supported today, with **WhatsApp**, **Discord**, and other platforms planned — each slots in as a drop-in adapter.
+Ingestion is **source-agnostic**: a small adapter parses each platform's export into a normalized message stream, and the rest of the pipeline (sessionizing, turn-merging, sensitive-data scanning, optional quality auditing, ShareGPT formatting) is shared. **Telegram** and **WhatsApp** are supported today, with **Discord** and other platforms planned — each slots in as a drop-in adapter.
 
 > [!CAUTION]
 > **Your chat history is sensitive data, and you are responsible for it.** A model fine-tuned on it can memorize and later reproduce personal identifiers, private conversations, credentials, and messages written by other people in your chats. The built-in [sensitive-data scanning](#privacy--sensitive-data) is a **safety net, not a guarantee** — both regex and LLM detection miss real cases and raise false positives. Before training, sharing, or deploying anything: **review the dataset yourself**, get consent from others whose messages are included (especially in group chats), and comply with applicable privacy laws. Treat trained adapters and merged checkpoints as sensitive too — they can leak the data they were trained on.
@@ -49,7 +49,7 @@ Fine-tuning on your chats can capture your:
 
 | Feature | Description |
 |---------|-------------|
-| **Source-agnostic ingestion** | One adapter per platform parses an export into a normalized message stream; the rest of the pipeline is shared. Telegram today; others drop in without touching the core. |
+| **Source-agnostic ingestion** | One adapter per platform parses an export into a normalized message stream; the rest of the pipeline is shared. Telegram + WhatsApp today; others drop in without touching the core. |
 | **Conversation reconstruction** | Sessionizes messages by silence gaps **and** reply links, merges consecutive turns, and (optionally) preserves per-speaker labels in group chats. |
 | **Sensitive-data scan** | Non-destructive regex scan over the built conversations — email, payment cards (checksum-validated), IP/MAC, API keys, plus pluggable country ID packs. Writes an audit report; you decide what to remove. |
 | **LLM redaction** *(optional)* | An OpenAI-compatible model flags context-dependent PII (names, secrets) regex misses, into the same report and apply step. Local-first by design. |
@@ -83,6 +83,8 @@ Doppelganger/
 ```
 
 > **Note:** Telegram exports unzip to a dated folder like `DataExport_2025-07-09/result.json`. Move (or copy) that `result.json` to `data/result.json` — `setup.sh` looks for it there. Alternatively, point `python -m ingest` at the file directly with `--input path/to/result.json`.
+
+> **Using WhatsApp instead?** Export a chat (`⋮ > More > Export chat > Without media`) to get a `.txt`, then run `python -m ingest --source whatsapp --input "WhatsApp Chat with Alice.txt" --self-name "Your Name"`. See [docs/sources/whatsapp.md](docs/sources/whatsapp.md) — `--self-name` is required since WhatsApp doesn't mark which participant is you.
 
 **2. Clone and run setup**
 

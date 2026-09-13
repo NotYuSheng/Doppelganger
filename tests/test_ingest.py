@@ -364,9 +364,13 @@ class RegistryTest(unittest.TestCase):
         self.assertIn("telegram", available_sources())
         self.assertEqual(get_adapter("telegram").name, "telegram")
 
+    def test_whatsapp_registered(self):
+        self.assertIn("whatsapp", available_sources())
+        self.assertEqual(get_adapter("whatsapp").name, "whatsapp")
+
     def test_unknown_source_raises(self):
         with self.assertRaises(ValueError):
-            get_adapter("whatsapp")
+            get_adapter("myspace")
 
 
 class CliTest(unittest.TestCase):

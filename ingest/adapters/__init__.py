@@ -12,6 +12,7 @@ from ingest.adapters.base import (  # noqa: F401
     register,
 )
 
-# Importing each adapter module registers it. (Only Telegram for now —
-# WhatsApp/Signal/etc. would each be one more import here.)
+# Importing each adapter module registers it. Each new source (Signal, Discord,
+# ...) is one more import here.
 from ingest.adapters import telegram  # noqa: F401,E402
+from ingest.adapters import whatsapp  # noqa: F401,E402
