@@ -149,6 +149,80 @@ class TimestampTest(unittest.TestCase):
         self.assertIsNone(self._ts("not a date"))
 
 
+class RegressionTest(unittest.TestCase):
+    """Findings from the code review on the WhatsApp adapter branch."""
+
+    def test_continuation_line_starting_with_date_is_kept(self):
+        # A wrapped body line whose text starts with a date/time must NOT be
+        # dropped: it lacks the " - "/"] " prefix separator, so it's a
+        # continuation, not a system notice. (Same silent-drop class as #42.)
+        text = (
+            "12/03/2024, 14:32 - Alice: my notes\n"
+            "13/04/2025, 09:00 standup recap\n"
+            "end line\n"
+            "12/03/2024, 14:33 - Yu Sheng: ok\n"
+        )
+        msgs = _parse(text, self_name=SELF)
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(
+            msgs[0].text, "my notes\n13/04/2025, 09:00 standup recap\nend line"
+        )
+
+    def test_no_space_after_comma(self):
+        # Some locales emit "DD/MM/YYYY,HH:MM" with no space after the comma.
+        text = (
+            "12/03/2024,14:32 - Alice: hi\n"
+            "12/03/2024,14:33 - Yu Sheng: yo\n"
+        )
+        msgs = _parse(text, self_name=SELF)
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(msgs[0].text, "hi")
+
+    def test_literal_null_message_is_kept(self):
+        # A real one-word message "null" must not be treated as a placeholder.
+        text = "12/03/2024, 14:32 - Alice: null\n"
+        msgs = _parse(text, self_name=SELF)
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0].text, "null")
+
+    def test_invisible_marks_around_placeholder_are_stripped(self):
+        # WhatsApp wraps placeholders in LRM/RLM marks; they must still be
+        # recognized and dropped. (LRM=U+200E, RLM=U+200F built explicitly so
+        # the marks survive editing.)
+        lrm, rlm = "‎", "‏"
+        text = f"12/03/2024, 14:32 - Alice: {lrm}<Media omitted>{rlm}\n"
+        self.assertEqual(_parse(text, self_name=SELF), [])
+
+
+class DateOrderTest(unittest.TestCase):
+    def test_us_format_detected_month_first(self):
+        # A date with second field > 12 forces month/day for the whole file, so
+        # "03/12/2024" is Dec 3, not March 12.
+        text = (
+            "03/12/2024, 09:00 - Alice: hi\n"       # ambiguous alone
+            "03/25/2024, 09:00 - Alice: later\n"    # 25 > 12 -> month-first
+            "03/12/2024, 09:01 - Yu Sheng: yo\n"
+        )
+        msgs = _parse(text, self_name=SELF)
+        first = [m for m in msgs if m.sender_id == "Alice"][0]
+        self.assertEqual(
+            first.timestamp, int(datetime(2024, 3, 12, 9, 0).timestamp())
+        )
+
+    def test_dmy_detected_day_first(self):
+        # First field > 12 forces day/month.
+        text = (
+            "25/03/2024, 09:00 - Alice: hi\n"       # 25 > 12 -> day-first
+            "05/03/2024, 09:01 - Yu Sheng: yo\n"
+        )
+        msgs = _parse(text, self_name=SELF)
+        yo = [m for m in msgs if m.sender_id == "Yu Sheng"][0]
+        # 05/03 under day-first is 5 March.
+        self.assertEqual(
+            yo.timestamp, int(datetime(2024, 3, 5, 9, 1).timestamp())
+        )
+
+
 class SelfNameTest(unittest.TestCase):
     def test_missing_self_name_raises(self):
         with self.assertRaises(ValueError):

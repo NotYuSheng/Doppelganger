@@ -16,9 +16,14 @@ Unlike Telegram's JSON export, WhatsApp gives us:
   stay ``None`` and the shared pipeline groups by time alone (exactly the
   documented fallback in :mod:`ingest.message`).
 - **No marker of who "you" are.** WhatsApp labels every message with a contact
-  name, never "me", so ``--self-name`` is effectively required. If it isn't
-  given we try to guess (the sole 1:1 counterpart's *other* name), but we raise
-  rather than silently mislabel when the guess is ambiguous.
+  name, never "me", so ``--self-name`` is required — we raise (listing the
+  senders found) rather than silently mislabel every turn.
+
+Date-field order (D/M vs M/D) is genuinely ambiguous from a single date, so the
+adapter first *scans the whole file* for a date that disambiguates (a first
+field > 12 means D/M; a second field > 12 means M/D) and applies that order to
+every line. Only a file whose every date is <= 12/12 stays ambiguous, and there
+we fall back to D/M (the WhatsApp default outside the US), warning once.
 """
 
 import os
@@ -38,7 +43,9 @@ from ingest.message import NormalizedMessage
 #   Android:  12/03/2024, 14:32 - Alice: hello
 # The date/time chunk itself is left loose (digits, separators, am/pm) and
 # parsed separately so we don't hard-code one locale's field order.
-_TS = r"(?P<ts>\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4},?\s+\d{1,2}[:.]\d{2}(?:[:.]\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)"
+# Bare (uncaptured) timestamp sub-pattern, reused in several regexes below.
+_TS_BARE = r"\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4}(?:,\s*|\s+)\d{1,2}[:.]\d{2}(?:[:.]\d{2})?\s*(?:[APap]\.?[Mm]\.?)?"
+_TS = r"(?P<ts>" + _TS_BARE + r")"
 
 _LINE_PATTERNS = [
     # iOS: whole prefix bracketed, closing "]" then "Sender: text".
@@ -47,35 +54,37 @@ _LINE_PATTERNS = [
     re.compile(r"^" + _TS + r"\s+-\s+(?P<sender>[^:]{1,100}?):\s(?P<text>.*)$"),
 ]
 
-# System/notification lines have a timestamp prefix but no "Sender:" — e.g.
-# "Messages and calls are end-to-end encrypted." or "Alice created group ...".
-# They match neither pattern above (no "Sender: " with a space after the colon),
-# so they're naturally skipped as continuation lines with no open message; we
-# drop those unless they continue a real message. This regex just detects that a
-# line *starts* with a timestamp prefix at all, to tell continuations apart from
-# system notices.
-_HAS_PREFIX = re.compile(r"^\[?\s*" + _TS)
+# System/notification lines have a full timestamp prefix + separator but no
+# "Sender:" — e.g. "Messages and calls are end-to-end encrypted." or
+# "Alice created group ...". They match neither _LINE_PATTERN (no "Sender: ")
+# but we must still tell them apart from a wrapped continuation line whose text
+# happens to start with a date (e.g. "13/04/2025 was the standup"). The
+# distinguisher is the prefix *separator*: a real WhatsApp entry always closes
+# the timestamp with "] " (iOS) or " - " (Android), which body text almost never
+# reproduces. So a line is a system notice only when it carries the whole prefix
+# *including that separator*; anything else is treated as continuation and kept.
+_HAS_PREFIX = re.compile(
+    r"^(?:\[\s*" + _TS_BARE + r"\s*\]\s|" + _TS_BARE + r"\s+-\s)"
+)
 
-# Candidate strptime formats, tried in order. WhatsApp emits a limited set; we
-# normalize separators to "/" and ", " first so one format string covers each.
-_DT_FORMATS = [
-    "%d/%m/%Y, %H:%M:%S",
-    "%d/%m/%Y, %H:%M",
-    "%m/%d/%Y, %H:%M:%S",
-    "%m/%d/%Y, %H:%M",
-    "%d/%m/%y, %H:%M:%S",
-    "%d/%m/%y, %H:%M",
-    "%m/%d/%y, %H:%M:%S",
-    "%m/%d/%y, %H:%M",
-    "%d/%m/%Y, %I:%M:%S %p",
-    "%d/%m/%Y, %I:%M %p",
-    "%m/%d/%Y, %I:%M:%S %p",
-    "%m/%d/%Y, %I:%M %p",
-    "%d/%m/%y, %I:%M:%S %p",
-    "%d/%m/%y, %I:%M %p",
-    "%m/%d/%y, %I:%M:%S %p",
-    "%m/%d/%y, %I:%M %p",
+# Candidate strptime time-part formats (the "H:M[:S] [AM/PM]" tail). The date
+# part is prepended per detected field order below. We normalize separators to
+# "/" and insert ", " first so one format string per shape covers each.
+_TIME_FORMATS = [
+    "%H:%M:%S",
+    "%H:%M",
+    "%I:%M:%S %p",
+    "%I:%M %p",
 ]
+
+# Full format lists for each resolved date-field order (day-first vs month-first,
+# 4- and 2-digit years). Built once from _TIME_FORMATS.
+def _build_formats(date_fmts):
+    return [f"{d}, {t}" for d in date_fmts for t in _TIME_FORMATS]
+
+
+_FORMATS_DAYFIRST = _build_formats(["%d/%m/%Y", "%d/%m/%y"])
+_FORMATS_MONTHFIRST = _build_formats(["%m/%d/%Y", "%m/%d/%y"])
 
 # Placeholder bodies WhatsApp writes for stripped media/omitted content. These
 # carry no text worth training on; we drop them so the message becomes empty and
@@ -92,43 +101,57 @@ _MEDIA_PLACEHOLDERS = {
     "contact card omitted",
     "this message was deleted",
     "you deleted this message",
-    "null",
 }
 
 # Non-breaking / narrow-no-break spaces show up inside iOS timestamps and around
 # the AM/PM marker; normalize them to plain spaces before parsing.
 _ODD_SPACES = re.compile(r"[   ]")
 
+# Invisible bidi/formatting marks WhatsApp injects around media placeholders
+# and RTL text (LRM/RLM, the LRE..PDF range, and zero-width space). Stripped
+# so placeholder matching and text see the plain content.
+_INVISIBLE = re.compile("[\u200b\u200e\u200f\u202a-\u202e]")
 
-def _parse_timestamp(raw: str) -> Optional[int]:
-    """Best-effort parse of a WhatsApp timestamp chunk into unix seconds.
 
-    Normalizes the many locale spellings (``.``/``-``/``/`` date separators,
-    ``HH.MM`` time separators, ``a.m.``/``AM`` markers, odd spaces) into the
-    canonical ``D/M/Y, H:M[:S] [AM/PM]`` shape the format list expects.
+def _normalize_ts(raw: str) -> Optional["tuple[str, str]"]:
+    """Split a raw timestamp chunk into normalized ``(date, time)`` parts.
 
-    Returns ``None`` if no known format matches, so the caller can treat the
-    line as a continuation rather than crash on one unusual export.
+    Normalizes locale spellings (``.``/``-``/``/`` date separators, ``HH.MM``
+    time separators, ``a.m.``/``AM`` markers, odd spaces). Returns ``None`` when
+    the chunk doesn't look like a date+time at all.
     """
-    s = _ODD_SPACES.sub(" ", raw).strip()
-    s = re.sub(r"\s+", " ", s)
-    # Split into date and time on the first comma-or-space before the clock, so
-    # we can normalize each half's separators independently.
-    m = re.match(r"^(?P<date>\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4}),?\s+(?P<rest>.+)$", s)
+    s = re.sub(r"\s+", " ", _ODD_SPACES.sub(" ", raw).strip())
+    # Split date from time on the comma/space between them (either or both; some
+    # locales emit "DD/MM/YYYY,HH:MM" with no space).
+    m = re.match(
+        r"^(?P<date>\d{1,4}[.\-/]\d{1,2}[.\-/]\d{1,4})(?:,\s*|\s+)(?P<rest>.+)$", s
+    )
     if not m:
         return None
     date = m.group("date").replace(".", "/").replace("-", "/")
     rest = m.group("rest")
-    # Time separator HH.MM -> HH:MM (leave the AM/PM marker alone).
-    rest = re.sub(r"(\d{1,2})\.(\d{2})", r"\1:\2", rest)
+    rest = re.sub(r"(\d{1,2})\.(\d{2})", r"\1:\2", rest)  # HH.MM -> HH:MM
     # Normalize "a.m."/"p. m."/"am" -> "AM"/"PM" (consuming any trailing dot).
     rest = re.sub(
-        r"([APap])\.?\s?[Mm]\.?",
-        lambda mm: mm.group(1).upper() + "M",
-        rest,
+        r"([APap])\.?\s?[Mm]\.?", lambda mm: mm.group(1).upper() + "M", rest
     )
-    s = re.sub(r"\s+", " ", f"{date}, {rest}").strip()
-    for fmt in _DT_FORMATS:
+    return date, re.sub(r"\s+", " ", rest).strip()
+
+
+def _parse_timestamp(raw: str, dayfirst: bool = True) -> Optional[int]:
+    """Parse a WhatsApp timestamp chunk into unix seconds.
+
+    ``dayfirst`` selects the date-field order (D/M when True, else M/D) — the
+    caller resolves it once per file via :func:`_detect_dayfirst`, since a single
+    date can't disambiguate. Returns ``None`` if no known format matches, so the
+    caller can treat the line as a continuation rather than crash.
+    """
+    parts = _normalize_ts(raw)
+    if parts is None:
+        return None
+    s = f"{parts[0]}, {parts[1]}"
+    formats = _FORMATS_DAYFIRST if dayfirst else _FORMATS_MONTHFIRST
+    for fmt in formats:
         try:
             return int(datetime.strptime(s, fmt).timestamp())
         except ValueError:
@@ -136,10 +159,33 @@ def _parse_timestamp(raw: str) -> Optional[int]:
     return None
 
 
+def _detect_dayfirst(raw_timestamps: "list[str]") -> Optional[bool]:
+    """Resolve date-field order for a whole file from its dates.
+
+    A first field > 12 forces day-first (D/M); a second field > 12 forces
+    month-first (M/D). Returns True/False when the file's dates settle it, or
+    ``None`` when every date is ambiguous (<= 12/12) and the caller should apply
+    a default.
+    """
+    for raw in raw_timestamps:
+        parts = _normalize_ts(raw)
+        if parts is None:
+            continue
+        fields = parts[0].split("/")
+        if len(fields) != 3:
+            continue
+        first, second = int(fields[0]), int(fields[1])
+        if first > 12:
+            return True   # first field can only be a day
+        if second > 12:
+            return False  # second field can only be a day
+    return None
+
+
 def _clean_text(text: str) -> str:
     """Strip a message body, dropping media/omitted placeholders to empty."""
-    t = _ODD_SPACES.sub(" ", text).strip()
-    if t.lower().strip("‎‎") in _MEDIA_PLACEHOLDERS:
+    t = _INVISIBLE.sub("", _ODD_SPACES.sub(" ", text)).strip()
+    if t.lower() in _MEDIA_PLACEHOLDERS:
         return ""
     return t
 
@@ -162,7 +208,21 @@ class WhatsAppAdapter:
         with open(path, encoding="utf-8") as f:
             lines = f.read().splitlines()
 
-        # First pass: reconstruct logical messages, joining continuation lines
+        # Resolve the file's date-field order (D/M vs M/D) up front from all its
+        # dates — a single date can't disambiguate. Default to day-first (the
+        # WhatsApp default outside the US) when every date is <= 12/12.
+        message_ts = [hit[0] for hit in (_match_line(l) for l in lines) if hit]
+        dayfirst = _detect_dayfirst(message_ts)
+        if dayfirst is None:
+            dayfirst = True
+            if message_ts:
+                print(
+                    "[whatsapp] Date order is ambiguous (all dates <= 12/12); "
+                    "assuming day/month/year. If your export is US-format "
+                    "(month/day), timestamps may be wrong."
+                )
+
+        # Main pass: reconstruct logical messages, joining continuation lines
         # (a message's own newlines land on lines with no timestamp prefix).
         raw_entries: "list[tuple[int, str, str]]" = []  # (timestamp, sender, text)
         cur: "Optional[list]" = None  # [ts_int, sender, [text_lines]]
@@ -170,7 +230,7 @@ class WhatsAppAdapter:
             hit = _match_line(line)
             if hit:
                 ts_raw, sender, text = hit
-                ts = _parse_timestamp(ts_raw)
+                ts = _parse_timestamp(ts_raw, dayfirst=dayfirst)
                 if ts is None:
                     # Unparseable prefix: treat as continuation of current msg
                     # rather than losing the line.
