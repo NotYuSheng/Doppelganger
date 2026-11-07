@@ -36,7 +36,8 @@ def _add_parse_flags(p: argparse.ArgumentParser, with_redact: bool = False) -> N
                    help="Group chats: keep (default), focus (only direct exchanges "
                         "with one person), or skip.")
     p.add_argument("--redact-locales", default=None,
-                   help="Comma-separated locales for sensitive-data detection (e.g. SG,US).")
+                   help="Sensitive-data detectors to run: auto (default), country codes "
+                        "(e.g. auto,SG,US), all, or none.")
     if with_redact:
         p.add_argument("--redact", choices=["off", "replace", "drop"], default="replace",
                        help="What to do with detected sensitive data (default: replace).")
