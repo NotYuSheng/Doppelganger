@@ -16,3 +16,4 @@ from ingest.adapters.base import (  # noqa: F401
 # ...) is one more import here.
 from ingest.adapters import telegram  # noqa: F401,E402
 from ingest.adapters import whatsapp  # noqa: F401,E402
+from ingest.adapters import instagram  # noqa: F401,E402

@@ -24,6 +24,7 @@
   <img src="https://img.shields.io/badge/Supported%20chats-555555?style=flat" alt="Supported chats:"/>
   <a href="docs/sources/telegram.md"><img src="https://img.shields.io/badge/Telegram-26A5E4?style=flat&logo=telegram&logoColor=white" alt="Telegram"/></a>
   <a href="docs/sources/whatsapp.md"><img src="https://img.shields.io/badge/WhatsApp-25D366?style=flat&logo=whatsapp&logoColor=white" alt="WhatsApp"/></a>
+  <a href="docs/sources/instagram.md"><img src="https://img.shields.io/badge/Instagram-E4405F?style=flat&logo=instagram&logoColor=white" alt="Instagram"/></a>
 </p>
 
 <p align="center">
@@ -91,6 +92,8 @@ Doppelganger/
 > **Note:** Telegram exports unzip to a dated folder like `DataExport_2025-07-09/result.json`. Move (or copy) that `result.json` to `data/result.json` — `setup.sh` looks for it there. Alternatively, point `python -m ingest` at the file directly with `--input path/to/result.json`.
 
 > **Using WhatsApp instead?** Export a chat (`⋮ > More > Export chat > Without media`) to get a `.txt`, then run `python -m ingest --source whatsapp --input "WhatsApp Chat with Alice.txt" --self-name "Your Name"`. See [docs/sources/whatsapp.md](docs/sources/whatsapp.md) — `--self-name` is required since WhatsApp doesn't mark which participant is you.
+>
+> **Using Instagram?** Request your data in Accounts Center → *Your information and permissions* → *Download your information*, pick **Messages** and format **JSON**, unzip it, then run `python -m ingest --source instagram --input path/to/instagram-export/`. See [docs/sources/instagram.md](docs/sources/instagram.md).
 
 **2. Clone and run setup**
 
@@ -141,7 +144,7 @@ llamafactory-cli train configs/train_lora.yaml
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--source` | `telegram` | Chat source to parse: `telegram` or `whatsapp` |
+| `--source` | `telegram` | Chat source to parse: `telegram`, `whatsapp` or `instagram` |
 | `--input` | `./data/result.json` | Path to the raw export |
 | `--format` | `sharegpt` | `sharegpt` (for training) or `jsonl` (intermediate) |
 | `--self-name` | auto-detected | Override which sender is "you" |
@@ -232,7 +235,7 @@ LLM_API_BASE_URL=http://localhost:8000/v1 LLM_MODEL=Qwen/Qwen2.5-7B-Instruct \
 
 ### Keeping your data out of git
 
-Your chat export and any generated datasets are ignored by `.gitignore` (`result.json`, `*.json`, `*.jsonl`, `DataExport*/`, `*.session`, `.env`, plus Telegram media/contacts such as `*.vcard`, `*.tgs`, `*.webp`, `*.ogg`/`*.oga`, and WhatsApp exports: `WhatsApp Chat*` `.txt`/`.zip`, `_chat.txt`, and `*-WA0001.*`-style media, `*.opus`, `*.vcf`). Generic media (`.jpg`, `.mp4`, …) lives inside `DataExport*/`, which is ignored wholesale. As an extra safeguard, a pre-commit hook refuses to commit these files even if they are force-added. Enable it once per clone:
+Your chat export and any generated datasets are ignored by `.gitignore` (`result.json`, `*.json`, `*.jsonl`, `DataExport*/`, `*.session`, `.env`, plus Telegram media/contacts such as `*.vcard`, `*.tgs`, `*.webp`, `*.ogg`/`*.oga`, and WhatsApp exports: `WhatsApp Chat*` `.txt`/`.zip`, `_chat.txt`, and `*-WA0001.*`-style media, `*.opus`, `*.vcf`, and Instagram exports: `instagram-*/`, `instagram-*.zip`, `your_instagram_activity/`). Generic media (`.jpg`, `.mp4`, …) lives inside `DataExport*/`, which is ignored wholesale. As an extra safeguard, a pre-commit hook refuses to commit these files even if they are force-added. Enable it once per clone:
 
 ```bash
 git config core.hooksPath hooks
