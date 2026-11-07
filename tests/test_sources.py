@@ -60,6 +60,11 @@ class ResolveSpecsTest(unittest.TestCase):
     def test_source_prefix_is_case_insensitive(self):
         self.assertEqual(sources.resolve_specs(["WhatsApp:x.txt"], "telegram")[0].source, "whatsapp")
 
+    def test_accepts_str_none_and_default_input(self):
+        self.assertEqual(sources.resolve_specs(None, "telegram")[0].path, sources.DEFAULT_INPUT)
+        spec = sources.resolve_specs("x.txt", "whatsapp", "Me")[0]
+        self.assertEqual((spec.path, spec.self_names), ("x.txt", ["Me"]))
+
     def test_duplicate_inputs_skipped(self):
         specs = sources.resolve_specs(["whatsapp:x.txt", "whatsapp:./x.txt"], "telegram")
         self.assertEqual(len(specs), 1)
@@ -109,10 +114,43 @@ class LoadSamplesTest(unittest.TestCase):
     def test_errors_name_the_failing_export(self):
         with tempfile.TemporaryDirectory() as d:
             specs = sources.resolve_specs([f"whatsapp:{_whatsapp(d)}"], "telegram")  # no self name
-            with self.assertRaises(ValueError) as ctx:
+            with self.assertRaises(sources.SourceLoadError) as ctx:
                 sources.load_samples(specs)
         self.assertIn("[whatsapp:", str(ctx.exception))
         self.assertIn("--self-name", str(ctx.exception))
+        self.assertIsInstance(ctx.exception.__cause__, ValueError)
+
+    def test_multi_arg_exceptions_are_wrapped_not_broken(self):
+        # JSONDecodeError / UnicodeDecodeError can't be rebuilt from one string;
+        # they must come through as SourceLoadError with the original chained.
+        with tempfile.TemporaryDirectory() as d:
+            bad_json = os.path.join(d, "result.json")
+            with open(bad_json, "w") as f:
+                f.write('{"chats": ')
+            bad_txt = os.path.join(d, "WhatsApp Chat with X.txt")
+            with open(bad_txt, "wb") as f:
+                f.write(b"13/03/2024, 10:00 - X: \xff\xfe bad bytes\n")
+            for spec_input, cause in ((bad_json, json.JSONDecodeError),
+                                      (f"whatsapp:{bad_txt}", UnicodeDecodeError)):
+                specs = sources.resolve_specs([spec_input], "telegram", ["whatsapp:YS"]
+                                              if spec_input.startswith("whatsapp") else [])
+                with self.assertRaises(sources.SourceLoadError) as ctx:
+                    sources.load_samples(specs)
+                self.assertIsInstance(ctx.exception.__cause__, cause)
+
+    def test_two_exports_same_app_different_names(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = os.path.join(d, "a.txt")
+            with open(a, "w", encoding="utf-8") as f:
+                f.write("13/03/2024, 10:00 - Bob: hi\n13/03/2024, 10:01 - Yu: hey\n")
+            b = os.path.join(d, "b.txt")
+            with open(b, "w", encoding="utf-8") as f:
+                f.write("13/03/2024, 11:00 - Cat: yo\n13/03/2024, 11:01 - Yu Sheng: sup\n")
+            specs = sources.resolve_specs([f"whatsapp:{a}", f"whatsapp:{b}"], "telegram",
+                                          ["whatsapp:Yu", "whatsapp:Yu Sheng"])
+            self.assertEqual(specs[0].self_names, ["Yu", "Yu Sheng"])
+            samples, results = sources.load_samples(specs)
+        self.assertEqual([r.samples for r in results], [1, 1])
 
 
 class CliTest(unittest.TestCase):

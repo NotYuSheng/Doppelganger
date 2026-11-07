@@ -24,20 +24,37 @@ happen to match.
 """
 
 import os
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from ingest import core
 from ingest.adapters import available_sources, get_adapter
 
 
+DEFAULT_INPUT = os.path.join("data", "result.json")
+
+
+class SourceLoadError(Exception):
+    """An export couldn't be loaded. The message names the source and path; the
+    original error is chained as ``__cause__``."""
+
+
 @dataclass
 class SourceSpec:
-    """One export to load: which adapter, which path, and who "you" are in it."""
+    """One export to load: which adapter, which path, and who "you" are in it.
+
+    ``self_names`` holds every name given for this source. With two exports from
+    the same app you may appear under different names, so each export uses the
+    first name that actually matches one of its senders.
+    """
 
     source: str
     path: str
-    self_name: Optional[str] = None
+    self_names: List[str] = field(default_factory=list)
+
+    @property
+    def self_name(self) -> Optional[str]:
+        return self.self_names[0] if self.self_names else None
 
 
 @dataclass
@@ -59,30 +76,40 @@ def _split_prefix(value: str) -> Tuple[Optional[str], str]:
     return None, value
 
 
+def _as_list(value: Union[str, Sequence[str], None]) -> List[str]:
+    if value is None:
+        return []
+    return [value] if isinstance(value, str) else list(value)
+
+
 def resolve_specs(
-    inputs: Sequence[str],
+    inputs: Union[str, Sequence[str], None],
     default_source: str,
-    self_names: Sequence[str] = (),
+    self_names: Union[str, Sequence[str], None] = (),
 ) -> List[SourceSpec]:
     """Turn ``--input`` / ``--self-name`` values into :class:`SourceSpec` s.
 
-    Raises ValueError for an unknown ``--source``, or for a source-specific
-    ``--self-name`` whose source isn't among the inputs (almost always a typo).
+    Each argument may be a single string, a list, or None. No inputs means
+    :data:`DEFAULT_INPUT`. Raises ValueError for an unknown ``--source``, or for
+    a source-specific ``--self-name`` whose source isn't among the inputs
+    (almost always a typo).
     """
+    inputs = _as_list(inputs) or [DEFAULT_INPUT]
+    self_names = _as_list(self_names)
     if default_source not in available_sources():
         raise ValueError(
             f"Source {default_source!r} is not supported. Supported sources: "
             f"{', '.join(available_sources())}."
         )
 
-    shared_name: Optional[str] = None
-    per_source: Dict[str, str] = {}
+    shared: List[str] = []
+    per_source: Dict[str, List[str]] = {}
     for value in self_names:
         source, name = _split_prefix(value)
         if source:
-            per_source[source] = name
+            per_source.setdefault(source, []).append(name)
         else:
-            shared_name = value
+            shared.append(value)
 
     specs: List[SourceSpec] = []
     seen = set()
@@ -94,7 +121,7 @@ def resolve_specs(
             print(f"[sources] Skipping duplicate input {value!r}.")
             continue
         seen.add(key)
-        specs.append(SourceSpec(source, path, per_source.get(source, shared_name)))
+        specs.append(SourceSpec(source, path, list(per_source.get(source, shared))))
 
     unused = sorted(set(per_source) - {s.source for s in specs})
     if unused:
@@ -113,9 +140,9 @@ def load_samples(
 ) -> Tuple[List[core.Sample], List[SourceResult]]:
     """Parse each export, build its samples, and combine them.
 
-    Returns ``(samples, per-source results)``. Errors from an adapter (missing
-    file, unrecognised format, can't tell who "you" are) propagate, with the
-    failing source and path added to the message.
+    Returns ``(samples, per-source results)``. An adapter error (missing file,
+    unrecognised format, can't tell who "you" are, bad JSON or encoding) is
+    raised as :class:`SourceLoadError` naming the failing source and path.
     """
     namespaced = len(specs) > 1
     samples: List[core.Sample] = []
@@ -124,9 +151,9 @@ def load_samples(
         label = f"'{spec.source}'" + (f" ({i}/{len(specs)})" if namespaced else "")
         print(f"Loading {spec.path} via {label} adapter...")
         try:
-            messages = get_adapter(spec.source).parse(spec.path, self_name=spec.self_name)
+            messages = _parse_with_names(spec)
         except Exception as e:
-            raise type(e)(f"[{spec.source}: {spec.path}] {e}") from e
+            raise SourceLoadError(f"[{spec.source}: {spec.path}] {e}") from e
         if namespaced:
             for m in messages:
                 m.chat_id = f"{i}:{spec.source}:{m.chat_id}"
@@ -139,6 +166,24 @@ def load_samples(
         samples.extend(built)
         results.append(SourceResult(spec, len(messages), len(built)))
     return samples, results
+
+
+def _parse_with_names(spec: SourceSpec):
+    """Parse one export, trying each candidate self name in turn.
+
+    The first name under which some message is recognised as yours wins. If none
+    is, the first name's result is kept (the adapter has already warned).
+    """
+    adapter = get_adapter(spec.source)
+    candidates = spec.self_names or [None]
+    first = None
+    for name in candidates:
+        messages = adapter.parse(spec.path, self_name=name)
+        if first is None:
+            first = messages
+        if len(candidates) == 1 or any(m.sender_is_self for m in messages):
+            return messages
+    return first
 
 
 def print_summary(results: Sequence[SourceResult]) -> None:

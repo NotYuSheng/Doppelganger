@@ -18,7 +18,7 @@ from ingest.validator import validate_samples
 
 # ── Canonical artifact paths (one source of truth) ───────────────────────────
 DATA_DIR = "data"
-DEFAULT_INPUT = os.path.join(DATA_DIR, "result.json")
+DEFAULT_INPUT = sources.DEFAULT_INPUT
 RAW_PATH = os.path.join(DATA_DIR, "chat_dataset.jsonl")        # parse output
 DATASET_PATH = os.path.join(DATA_DIR, "chat_sharegpt.json")    # audit output (trains)
 REPORT_PATH = os.path.join(DATA_DIR, "redaction_report.json")
@@ -164,10 +164,8 @@ def parse(
     ``input_path`` and ``self_name`` may be lists to combine several exports
     (see :mod:`ingest.sources` for the ``source:path`` / ``source:name`` forms).
     """
-    inputs = [input_path] if isinstance(input_path, str) else list(input_path or [DEFAULT_INPUT])
-    names = [self_name] if isinstance(self_name, str) else list(self_name or [])
     try:
-        specs = sources.resolve_specs(inputs, source, names)
+        specs = sources.resolve_specs(input_path, source, self_name)
     except ValueError as e:
         print(f"error: {e}")
         return 2
@@ -185,7 +183,7 @@ def parse(
             message_chain=message_chain,
             multi_speaker=multi_speaker,
         )
-    except Exception as e:  # malformed export, bad permissions, self-name detection failure
+    except sources.SourceLoadError as e:  # malformed export, bad permissions, unknown self
         print(f"error: failed to parse export: {e}")
         return 1
     print(f"Extracted {len(samples)} conversation samples.")

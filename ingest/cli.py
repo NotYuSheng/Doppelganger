@@ -21,7 +21,7 @@ from ingest import core, redactor, sharegpt, sources
 from ingest.adapters import available_sources
 from ingest.validator import validate_samples
 
-DEFAULT_INPUT = "./data/result.json"
+DEFAULT_INPUT = sources.DEFAULT_INPUT
 SHAREGPT_OUTPUT = "./data/chat_sharegpt.json"
 JSONL_OUTPUT = "./data/chat_dataset.jsonl"
 
@@ -191,9 +191,7 @@ def main(argv=None) -> int:
     banner.print_banner()
 
     try:
-        specs = sources.resolve_specs(
-            args.input or [DEFAULT_INPUT], args.source, args.self_name or []
-        )
+        specs = sources.resolve_specs(args.input, args.source, args.self_name)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -209,7 +207,7 @@ def main(argv=None) -> int:
             message_chain=args.message_chain,
             multi_speaker=args.multi_speaker,
         )
-    except (OSError, ValueError) as e:  # missing file, unrecognised export, unknown self
+    except sources.SourceLoadError as e:  # missing file, bad export, unknown self, ...
         print(f"error: {e}", file=sys.stderr)
         return 1
     print(f"Extracted {len(samples)} conversation samples.")
