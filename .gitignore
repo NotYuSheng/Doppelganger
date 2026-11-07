@@ -49,3 +49,11 @@ _chat.txt
 instagram-*/
 instagram-*.zip
 your_instagram_activity/
+
+# Facebook / Messenger exports — never commit
+# DYI zip and folder: facebook-<name>-2026-11-07-<id>; secure-storage (E2EE) download unzips
+# to your_activity_across_facebook/ or a folder of <name>_N.json threads + media/
+facebook-*/
+facebook-*.zip
+your_facebook_activity/
+your_activity_across_facebook/

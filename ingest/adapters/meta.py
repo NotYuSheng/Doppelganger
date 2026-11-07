@@ -1,24 +1,30 @@
-"""Shared parser for Meta's "Download Your Information" message exports.
+"""Shared parser for Meta's message exports (Instagram and Facebook Messenger).
 
-Instagram and Facebook Messenger produce the same per-thread JSON in a
-Download Your Information (DYI) export, requested with format **JSON**:
+Two export shapes are understood, and an ``--input`` folder may contain either
+or both (for Messenger, unzip both downloads into one folder):
 
-    <export root>/
-    ├── your_instagram_activity/messages/inbox/alice_1234567890/message_1.json
-    │   (older layouts: messages/inbox/..., Messenger: your_facebook_activity/...)
-    └── personal_information/personal_information/personal_information.json
+**1. Download Your Information (DYI), format JSON.** One folder per
+conversation, with long threads split across ``message_1.json``,
+``message_2.json``, …::
 
-Each ``message_N.json`` (long threads are split into several) looks like::
+    <export root>/your_instagram_activity/messages/inbox/alice_123/message_1.json
+    (Messenger: your_facebook_activity/messages/{inbox,archived_threads,e2ee_cutover}/…,
+     older exports: messages/inbox/…)
 
-    {
-      "participants": [{"name": "Alice"}, {"name": "You"}],
-      "messages": [
-        {"sender_name": "Alice", "timestamp_ms": 1700000000000, "content": "hi"},
-        ...
-      ],
-      "title": "Alice",
-      "thread_path": "inbox/alice_1234567890"
-    }
+    {"participants": [{"name": "Alice"}, {"name": "You"}],
+     "messages": [{"sender_name": "Alice", "timestamp_ms": 1700000000000,
+                   "content": "hi", "type": "Generic"}, ...],
+     "title": "Alice", "thread_path": "inbox/alice_123"}
+
+**2. Messenger end-to-end encrypted chats ("Download secure storage data").**
+Since late 2023 most Messenger chats are end-to-end encrypted and are **not** in
+DYI. Their separate download is a flat folder with one file per conversation
+(``alice_1.json``) and a ``media/`` folder next to them::
+
+    {"participants": ["You", "Alice"], "threadName": "Alice",
+     "messages": [{"senderName": "Alice", "text": "hi",
+                   "timestamp": 1700000000000, "type": "Generic",
+                   "isUnsent": false, "media": [], "reactions": []}, ...]}
 
 Quirks absorbed here, so the shared pipeline never sees them:
 
@@ -26,62 +32,82 @@ Quirks absorbed here, so the shared pipeline never sees them:
   character ("ðŸ‘" for "👍"), so every string is repaired with
   ``encode("latin-1").decode("utf-8")``. Strings that are already correct fail
   that round trip and are left unchanged.
-- **Newest-first order.** Messages are listed newest first. We restore
-  chronological order, keeping the original order for same-second messages.
+- **Newest-first order** (DYI). Messages are put back in chronological order,
+  keeping the original order for same-millisecond messages.
+- **Overlap between the two downloads.** A chat that switched to encryption can
+  appear in both (``e2ee_cutover/`` in DYI and the secure-storage file), so
+  exact duplicates (same sender, millisecond and text) are dropped.
 - **No message ids or reply links**, so ``message_id`` / ``reply_to_id`` stay
   ``None`` and the pipeline groups by time.
 - **Who "you" are isn't marked on each message.** It's resolved from
-  ``--self-name``, then the export's ``personal_information.json``, then "the
-  one participant present in every thread".
+  ``--self-name``, then the export's profile file, then "the one participant
+  present in every thread".
 - **Non-text events** (reactions, likes, "sent an attachment", unsent messages,
-  shared posts without a caption, calls) are dropped.
+  shared posts without a caption, calls, group notices) are dropped.
 
-The format is not officially documented. The field names above come from
-community parsers and should be re-checked against real exports when Meta
-changes them.
+Neither shape is officially documented. The field names above come from
+community parsers (e.g. msgvault, chatpack) and public sample exports, and
+should be re-checked when Meta changes them.
 """
 
 import json
 import os
 import re
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, List, NamedTuple, Optional, Set, Tuple
 
 from ingest.message import NormalizedMessage
 
-_THREAD_FILE = re.compile(r"^message_\d+\.json$")
+_DYI_FILE = re.compile(r"^message_\d+\.json$")
 
 # Folder names whose threads aren't real conversations you took part in:
-# unanswered requests from strangers and spam-filtered threads.
-_SKIP_DIRS = {"message_requests", "filtered_threads"}
+# unanswered requests from strangers and spam-filtered threads. Media folders
+# hold no thread JSON, so skipping them just saves time.
+_SKIP_DIRS = {"message_requests", "filtered_threads", "media", "photos", "videos",
+              "audio", "gifs", "files", "stickers_used"}
 
-# Message "type" values (older exports) that never carry text you wrote.
+# Message "type" values that never carry text you wrote.
 _SYSTEM_TYPES = {"Call", "Subscribe", "Unsubscribe"}
 
-# Content Meta generates for non-text events. Matched against the whole message
-# (case-insensitive) after mojibake repair. "{name}" lines appear both as
-# "You sent an attachment." and "Alice sent an attachment.".
+# Content Meta generates for non-text events, matched against the whole message
+# (case-insensitive) after mojibake repair. Where a pattern names a person
+# ("Alice sent an attachment.", "You called Alice."), the named ``who`` /
+# ``target`` must be "You" or someone in the thread. Without that check, real
+# messages like "You called it!" or "I left the chat" would be thrown away.
 _SYSTEM_PATTERNS = [
     re.compile(p, re.IGNORECASE)
     for p in (
-        r"^liked a message$",
-        r"^reacted .{1,8} to (your|a) message$",
-        r"^(.+ )?sent an attachment\.?$",
-        r"^(.+ )?sent a (photo|video|voice message|gif|sticker|link)\.?$",
-        r"^(.+ )?shared a (story|post|reel|link)\.?$",
-        r"^(.+ )?unsent a message\.?$",
-        r"^(.+ )?(started|ended|missed) (a|an|the|your)? ?(audio |video )?call\.?$",
-        r"^the (audio |video )?(call|chat) ended\.?$",
-        r"^you called .+$",
-        r"^.+ called you\.?$",
-        r"^.+ missed your (audio |video )?call\.?$",
-        r"^you missed an? (audio |video )?call from .+$",
-        r"^(.+ )?(created|named) the group.*$",
-        r"^(.+ )?(added|removed) .+ (to|from) the group\.?$",
-        r"^(.+ )?left the group\.?$",
-        r"^(.+ )?changed the group (name|photo).*$",
+        r"^liked a message\.?$",
+        r"^reacted .{1,8} to (your|a) message\.?$",
+        r"^(?P<who>.+) sent an attachment\.$",
+        r"^sent an attachment\.$",
+        r"^(?P<who>.+) sent a (photo|video|voice message|gif|sticker|link)\.$",
+        r"^(?P<who>.+) shared a (story|post|reel|link)\.$",
+        r"^(?P<who>.+) unsent a message\.$",
+        r"^(?P<who>.+) (started|ended|missed) (a|an|the|your) (audio |video )?(call|chat)\.$",
+        r"^(started|ended|missed) an? (audio |video )?(call|chat)$",
+        r"^(audio|video) (call|chat) ended$",
+        r"^the (audio |video )?(call|chat) ended\.$",
+        r"^you called (?P<target>.+)\.$",
+        r"^(?P<who>.+) called you\.$",
+        r"^(?P<who>.+) missed your (audio |video )?call\.$",
+        r"^you missed an? (audio |video )?call from (?P<target>.+)\.$",
+        r"^(?P<who>.+) (created|named) the group\b.*$",
+        r"^(?P<who>.+) (added|removed) (?P<target>.+) (to|from) the group\.$",
+        r"^(?P<who>.+) left the (group|chat|conversation)\.$",
+        r"^(?P<who>.+) changed the group (name|photo)\b.*$",
         r"^mentioned you in (their|a) story\.?$",
     )
 ]
+
+
+class _Msg(NamedTuple):
+    """One message, already normalized from either export shape."""
+
+    sender: str
+    ts_ms: int
+    text: str
+    unsent: bool
+    kind: str  # Meta's "type" ("Generic", "Call", ...) or ""
 
 
 def fix_mojibake(value: str) -> str:
@@ -98,60 +124,118 @@ def fix_mojibake(value: str) -> str:
         return value
 
 
-def _is_system(text: str) -> bool:
-    return any(p.match(text) for p in _SYSTEM_PATTERNS)
+def _is_system(text: str, names: Set[str]) -> bool:
+    """Whether ``text`` is a Meta-generated event notice.
+
+    ``names`` holds the lower-cased names of the thread's participants and
+    senders; "you" is always accepted.
+    """
+    for p in _SYSTEM_PATTERNS:
+        m = p.match(text)
+        if not m:
+            continue
+        people = [v for k, v in m.groupdict().items() if v is not None]
+        if all(v.strip().lower() in names or v.strip().lower() == "you" for v in people):
+            return True
+    return False
 
 
-def find_thread_files(path: str) -> Dict[str, List[str]]:
-    """Map each thread directory to its ``message_N.json`` files.
+def _read_json(path: str):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
 
-    ``path`` may be the unzipped export root, any folder inside it (such as
-    ``.../messages/inbox``), one thread folder, or a single ``message_N.json``.
-    When walking a folder, message requests and spam-filtered threads are
-    skipped.
+
+def _is_e2ee_thread(data) -> bool:
+    """Whether parsed JSON is a secure-storage (E2EE) thread file."""
+    return (
+        isinstance(data, dict)
+        and isinstance(data.get("messages"), list)
+        and isinstance(data.get("participants"), list)
+        and all(isinstance(p, str) for p in data["participants"])
+    )
+
+
+def find_threads(path: str, cache: Optional[Dict[str, object]] = None) -> Dict[str, List[str]]:
+    """Map a thread id to the JSON file(s) holding that conversation.
+
+    ``path`` may be an unzipped export root (DYI, secure storage, or both
+    unzipped into one folder), any folder inside it, one DYI thread folder, or a
+    single thread file. DYI threads are keyed by their folder name
+    (``alice_123``), secure-storage threads by file name (``alice_1``). The same
+    conversation can appear in more than one place (``inbox/`` and
+    ``e2ee_cutover/``), so files with the same key are combined, not replaced.
+    Message requests and spam-filtered threads are skipped.
+
+    Secure-storage files have no fixed name, so they're recognised by shape.
+    Only folders where they live (named ``messages``, or the ``--input`` folder
+    itself) are probed. Parsed files are kept in ``cache`` so they aren't read
+    twice.
     """
     if os.path.isfile(path):
-        return {os.path.dirname(os.path.abspath(path)): [path]}
+        if _DYI_FILE.match(os.path.basename(path)):
+            return {os.path.basename(os.path.dirname(os.path.abspath(path))): [path]}
+        return {os.path.splitext(os.path.basename(path))[0]: [path]}
     if not os.path.isdir(path):
         raise FileNotFoundError(
             f"{path!r} not found. Point --input at the unzipped export folder "
-            "(or a message_1.json inside it)."
+            "(or a thread .json file inside it)."
         )
 
+    root = os.path.abspath(path)
     threads: Dict[str, List[str]] = {}
     for dirpath, dirnames, filenames in os.walk(path):
         dirnames[:] = sorted(d for d in dirnames if d not in _SKIP_DIRS)
-        files = sorted(f for f in filenames if _THREAD_FILE.match(f))
-        if files:
-            threads[dirpath] = [os.path.join(dirpath, f) for f in files]
+        dyi = sorted(f for f in filenames if _DYI_FILE.match(f))
+        if dyi:
+            threads.setdefault(os.path.basename(dirpath), []).extend(
+                os.path.join(dirpath, f) for f in dyi)
+            continue
+        if os.path.basename(dirpath) != "messages" and os.path.abspath(dirpath) != root:
+            continue
+        for f in sorted(filenames):
+            if not f.endswith(".json"):
+                continue
+            full = os.path.join(dirpath, f)
+            try:
+                data = _read_json(full)
+            except (OSError, ValueError):
+                continue
+            if _is_e2ee_thread(data):
+                if cache is not None:
+                    cache[full] = data
+                threads.setdefault(os.path.splitext(f)[0], []).append(full)
     return threads
 
 
 def _find_profile_names(path: str) -> Set[str]:
-    """Owner names from ``personal_information.json``, if the export has one.
+    """The owner's names from the export's profile file, if there is one.
 
-    Instagram stores them as
-    ``{"profile_user": [{"string_map_data": {"Name": {"value": ...},
-    "Username": {"value": ...}}}]}``. Missing or unexpected shapes give an
-    empty set rather than an error.
+    Instagram: ``personal_information.json`` →
+    ``profile_user[0].string_map_data.{Name,Username}.value``.
+    Facebook: ``profile_information.json`` → ``profile_v2.name.full_name``.
+    Missing or unexpected shapes give an empty set rather than an error.
     """
     if not os.path.isdir(path):
         return set()
     names: Set[str] = set()
-    for dirpath, _dirnames, filenames in os.walk(path):
-        if "personal_information.json" not in filenames:
-            continue
-        try:
-            with open(os.path.join(dirpath, "personal_information.json"), encoding="utf-8") as f:
-                data = json.load(f)
-            for user in data.get("profile_user", []):
-                fields = user.get("string_map_data", {})
-                for key in ("Name", "Username"):
-                    value = (fields.get(key) or {}).get("value")
-                    if value:
-                        names.add(fix_mojibake(value))
-        except (OSError, ValueError, AttributeError):
-            continue
+    for dirpath, dirnames, filenames in os.walk(path):
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and d != "inbox"]
+        for fname in ("personal_information.json", "profile_information.json"):
+            if fname not in filenames:
+                continue
+            try:
+                data = _read_json(os.path.join(dirpath, fname))
+                for user in data.get("profile_user", []) or []:
+                    fields = user.get("string_map_data", {})
+                    for key in ("Name", "Username"):
+                        value = (fields.get(key) or {}).get("value")
+                        if value:
+                            names.add(fix_mojibake(value))
+                full = ((data.get("profile_v2") or {}).get("name") or {}).get("full_name")
+                if full:
+                    names.add(fix_mojibake(full))
+            except (OSError, ValueError, AttributeError):
+                continue
     return names
 
 
@@ -161,26 +245,61 @@ def _part_number(file: str) -> int:
     return int(m.group(1)) if m else 0
 
 
-def _load_thread(files: Iterable[str]):
-    """Return ``(participants, messages)`` for one thread, oldest first."""
+def _normalize(m) -> Optional[_Msg]:
+    """Turn one raw message (either shape) into a :class:`_Msg`, or None."""
+    if not isinstance(m, dict):
+        return None
+    sender = m.get("sender_name") or m.get("senderName")
+    ts = m.get("timestamp_ms", m.get("timestamp"))
+    if not sender or not isinstance(ts, (int, float)):
+        return None
+    text = m.get("content") if "content" in m else m.get("text")
+    return _Msg(
+        sender=fix_mojibake(sender),
+        ts_ms=int(ts),
+        text=fix_mojibake(text or "").strip(),
+        unsent=bool(m.get("is_unsent") or m.get("isUnsent")),
+        kind=m.get("type") or "",
+    )
+
+
+def _load_thread(
+    files: List[str], cache: Optional[Dict[str, object]] = None
+) -> Tuple[Set[str], List[_Msg], int]:
+    """Return ``(participants, messages oldest-first, unrecognised count)``."""
     participants: Set[str] = set()
     raw: list = []
     # message_1.json holds the newest messages; message_2.json the next-older
     # block, and so on. Read newest to oldest, then reverse the lot.
     for file in sorted(files, key=_part_number):
-        with open(file, encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            data = cache.pop(file) if cache and file in cache else _read_json(file)
+        except (OSError, ValueError) as e:
+            print(f"[meta] Warning: skipping unreadable file {file!r}: {e}")
+            continue
+        if not isinstance(data, dict):
+            print(f"[meta] Warning: skipping {file!r}: not a conversation file")
+            continue
         for p in data.get("participants", []):
-            name = p.get("name") if isinstance(p, dict) else None
-            if name:
+            name = p.get("name") if isinstance(p, dict) else p
+            if isinstance(name, str) and name:
                 participants.add(fix_mojibake(name))
         raw.extend(data.get("messages", []))
-    # Meta writes newest first, so reversing gives chronological order and
-    # keeps the original order of same-millisecond messages. The stable sort
-    # afterwards also copes with files that are already oldest-first.
     raw.reverse()
-    raw.sort(key=lambda m: m.get("timestamp_ms", 0) if isinstance(m, dict) else 0)
-    return participants, raw
+
+    msgs: List[_Msg] = []
+    bad = 0
+    for m in raw:
+        n = _normalize(m)
+        if n is None:
+            bad += 1
+        else:
+            msgs.append(n)
+    # Reversing gives chronological order for newest-first DYI files and keeps
+    # same-millisecond order; the stable sort also fixes files that were
+    # already oldest-first (secure storage, some third-party files).
+    msgs.sort(key=lambda m: m.ts_ms)
+    return participants, msgs, bad
 
 
 def _resolve_self(
@@ -196,7 +315,7 @@ def _resolve_self(
 
     for name in sorted(_find_profile_names(path)):
         if name in senders:
-            print(f"[{source}] Detected self name from personal_information: {name!r}")
+            print(f"[{source}] Detected self name from your profile: {name!r}")
             return name
 
     if len(thread_participants) >= 2:
@@ -217,25 +336,23 @@ def _resolve_self(
 def parse_export(
     source: str, path: str, self_name: Optional[str] = None
 ) -> List[NormalizedMessage]:
-    """Parse a Meta DYI messages export into normalized messages."""
-    threads = find_thread_files(path)
+    """Parse a Meta messages export into normalized messages."""
+    cache: Dict[str, object] = {}
+    threads = find_threads(path, cache)
     if not threads:
         raise ValueError(
-            f"No message_N.json files found under {path!r}. Make sure the export "
+            f"No conversation files found under {path!r}. Make sure the export "
             "was requested in JSON format (not HTML) and is unzipped."
         )
 
     loaded = []
-    for thread_dir, files in sorted(threads.items()):
-        participants, raw = _load_thread(files)
-        loaded.append((os.path.basename(thread_dir), participants, raw))
+    skipped = 0
+    for chat_id, files in sorted(threads.items()):
+        participants, msgs, bad = _load_thread(files, cache)
+        skipped += bad
+        loaded.append((chat_id, participants, msgs))
 
-    senders = {
-        fix_mojibake(m["sender_name"])
-        for _, _, raw in loaded
-        for m in raw
-        if isinstance(m, dict) and m.get("sender_name")
-    }
+    senders = {m.sender for _, _, msgs in loaded for m in msgs}
     me = _resolve_self(source, self_name, path, [p for _, p, _ in loaded if p], senders)
     if me not in senders:
         print(
@@ -246,32 +363,32 @@ def parse_export(
         )
 
     messages: List[NormalizedMessage] = []
-    skipped = 0
-    for chat_id, _participants, raw in loaded:
-        for m in raw:
-            if not isinstance(m, dict) or "timestamp_ms" not in m or not m.get("sender_name"):
-                skipped += 1
+    seen: Set[Tuple[str, int, str]] = set()
+    duplicates = 0
+    for chat_id, participants, msgs in loaded:
+        names = {n.lower() for n in participants} | {m.sender.lower() for m in msgs}
+        for m in msgs:
+            if m.unsent or m.kind in _SYSTEM_TYPES or not m.text or _is_system(m.text, names):
                 continue
-            # Older exports tag non-text events with a "type"; Generic and Share
-            # can carry real text, the others never do.
-            if m.get("is_unsent") or m.get("type") in _SYSTEM_TYPES:
+            key = (m.sender, m.ts_ms, m.text)
+            if key in seen:
+                duplicates += 1
                 continue
-            text = fix_mojibake(m.get("content") or "").strip()
-            if not text or _is_system(text):
-                continue
-            sender = fix_mojibake(m["sender_name"])
+            seen.add(key)
             messages.append(
                 NormalizedMessage(
                     chat_id=chat_id,
-                    timestamp=int(m["timestamp_ms"]) // 1000,
-                    sender_id=sender,
-                    sender_is_self=(sender == me),
-                    text=text,
+                    timestamp=m.ts_ms // 1000,
+                    sender_id=m.sender,
+                    sender_is_self=(m.sender == me),
+                    text=m.text,
                     message_id=None,
                     reply_to_id=None,
                 )
             )
     if skipped:
         print(f"[{source}] Skipped {skipped} entries in an unrecognised shape.")
+    if duplicates:
+        print(f"[{source}] Dropped {duplicates} messages that appeared in both downloads.")
     print(f"[{source}] Parsed {len(messages)} messages from {len(loaded)} threads.")
     return messages
