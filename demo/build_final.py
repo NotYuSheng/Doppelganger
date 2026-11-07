@@ -52,16 +52,25 @@ def write_banner_module():
     body = "\n".join(lean_rows("<C>", "<R>"))
     mod = (
         '"""ASCII startup banner: a parrot in a mirror (it mimics your voice; the\n'
-        'mirror is the doppelganger) beside the wordmark, in truecolor amber.\n'
+        'mirror is the doppelganger) beside the wordmark, in a gold-to-coral gradient.\n'
         'Regenerate via demo/build_final.py. DOPPELGANGER_NO_BANNER=1 silences it."""\n\n'
         'import os\n\n'
-        '_AMBER = "\\x1b[1;38;2;242;176;76m"  # truecolor amber\n'
+        '_GRAD_TOP, _GRAD_BOTTOM = (255, 196, 84), (233, 84, 64)  # gold -> coral, top to bottom\n'
         '_RESET = "\\x1b[0m"\n\n'
         '_BANNER = r"""\n' + body + '\n"""\n\n\n'
+        'def _colour(i: int, n: int) -> str:\n'
+        '    """Truecolor escape for wordmark line ``i`` of ``n`` along the gradient."""\n'
+        '    t = i / max(1, n - 1)\n'
+        '    r, g, b = (round(a + (z - a) * t) for a, z in zip(_GRAD_TOP, _GRAD_BOTTOM))\n'
+        '    return f"\\x1b[1;38;2;{r};{g};{b}m"\n\n\n'
         'def print_banner() -> None:\n'
         '    if os.environ.get("DOPPELGANGER_NO_BANNER"):\n'
         '        return\n'
-        '    print(_BANNER.replace("<C>", _AMBER).replace("<R>", _RESET) + "\\n")\n'
+        '    lines = _BANNER.split("\\n")\n'
+        '    marked = [i for i, line in enumerate(lines) if "<C>" in line]\n'
+        '    for k, i in enumerate(marked):\n'
+        '        lines[i] = lines[i].replace("<C>", _colour(k, len(marked))).replace("<R>", _RESET)\n'
+        '    print("\\n".join(lines) + "\\n")\n'
     )
     with open(os.path.join(ROOT, "ingest/banner.py"), "w", encoding="utf-8") as f:
         f.write(mod)

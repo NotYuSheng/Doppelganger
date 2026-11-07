@@ -136,7 +136,8 @@ def _menu() -> int:
     from doppelganger import tui
     banner.print_banner()
     runners = {
-        "parse": lambda: _guided(steps.parse), "audit": steps.audit, "train": steps.train,
+        "parse": lambda: _guided(steps.parse), "audit": lambda: steps.audit(country_hint=False),
+        "train": steps.train,
         "merge": steps.merge, "chat": steps.chat,
     }
     while True:

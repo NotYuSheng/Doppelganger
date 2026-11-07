@@ -47,6 +47,11 @@ class PlainPickerTest(unittest.TestCase):
         self.assertEqual(self._run(lambda: tui.multiselect("t", ["a", "b"]), ["none"]), [])
         self.assertIsNone(self._run(lambda: tui.multiselect("t", ["a"]), ["q"]))
 
+    def test_multiselect_all_and_action(self):
+        self.assertEqual(self._run(lambda: tui.multiselect("t", ["a", "b", "c"], select_all=True), ["all"]),
+                         [0, 1, 2])
+        self.assertEqual(self._run(lambda: tui.multiselect("t", ["a"], action="Add…"), ["add"]), tui.ACTION)
+
     def test_not_interactive_without_tty(self):
         self.assertFalse(tui.interactive())
 
@@ -98,7 +103,7 @@ class FakeUI:
     def select(self, title, options, default=0, hints=None):
         return self._next(title)
 
-    def multiselect(self, title, options, checked=None, hints=None):
+    def multiselect(self, title, options, checked=None, hints=None, **kw):
         return self._next(title)
 
     def text(self, prompt, default=""):
@@ -119,8 +124,8 @@ class WizardFlowTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             data = _workspace(d)
             # exports: both ticked; WhatsApp self: 2nd most active ("Alex Tan");
-            # group chats: focus; countries: SG
-            ui = FakeUI([0, 1], 1, 1, None)
+            # group chats: focus; scan: choose countries -> SG
+            ui = FakeUI([0, 1], 1, 1, 1, None)
             from ingest import redaction
             codes = [c for c in redaction.available_locales() if c != "universal"]
             ui.answers[-1] = [codes.index("SG")]
@@ -131,14 +136,14 @@ class WizardFlowTest(unittest.TestCase):
         self.assertEqual(kw["self_name"], ["whatsapp:Alex Tan"])  # Telegram detects itself
         self.assertEqual(kw["group_chats"], "focus")
         self.assertEqual(kw["locales"], ["auto", "SG"])
-        self.assertEqual(len(ui.asked), 4)
+        self.assertEqual(len(ui.asked), 5)
 
     def test_plan_runs_through_parse(self):
         from doppelganger import steps
         with tempfile.TemporaryDirectory() as d:
             data = _workspace(d)
             with redirect_stdout(io.StringIO()):
-                plan = wizard.run(FakeUI([0, 1], 1, 0, []), roots=[data])
+                plan = wizard.run(FakeUI([0, 1], 1, 0, 0), roots=[data])
             orig = (steps.DATA_DIR, steps.RAW_PATH, steps.REPORT_PATH)
             steps.DATA_DIR, steps.RAW_PATH, steps.REPORT_PATH = d, os.path.join(d, "raw.jsonl"), os.path.join(d, "r.json")
             try:
@@ -151,7 +156,8 @@ class WizardFlowTest(unittest.TestCase):
     def test_cancel_anywhere_returns_none(self):
         with tempfile.TemporaryDirectory() as d:
             data = _workspace(d)
-            for answers in ([None], [[0, 1], None], [[0, 1], 1, None], [[0, 1], 1, 0, None]):
+            for answers in ([None], [[0, 1], None], [[0, 1], 1, None], [[0, 1], 1, 0, None],
+                            [[0, 1], 1, 0, 1, None]):
                 with redirect_stdout(io.StringIO()):
                     self.assertIsNone(wizard.run(FakeUI(*answers), roots=[data]))
 
@@ -162,11 +168,27 @@ class WizardFlowTest(unittest.TestCase):
             chat = os.path.join(d, "chat.txt")
             shutil.copy(os.path.join(ROOT, "demo", "sample_whatsapp.txt"), chat)
             from ingest.adapters import available_sources
-            ui = FakeUI(available_sources().index("whatsapp"), chat, [0], 0, 0, [])
+            ui = FakeUI(available_sources().index("whatsapp"), chat, [0], 0, 0, 0)
             with redirect_stdout(io.StringIO()) as out:
                 plan = wizard.run(ui, roots=[empty])
         self.assertIn("docs/sources/README.md", out.getvalue())
         self.assertEqual([(e.source, e.path) for e in plan.exports], [("whatsapp", chat)])
+
+    def test_auto_scan_needs_no_country_list(self):
+        ui = FakeUI(0)
+        self.assertEqual(wizard.choose_countries(ui), [])
+        self.assertEqual(len(ui.asked), 1)  # the country list wasn't shown
+
+    def test_add_another_action(self):
+        with tempfile.TemporaryDirectory() as d:
+            data = _workspace(d)
+            extra = os.path.join(d, "more.txt")
+            shutil.copy(os.path.join(ROOT, "demo", "sample_whatsapp.txt"), extra)
+            from ingest.adapters import available_sources
+            ui = FakeUI(tui.ACTION, available_sources().index("whatsapp"), extra, [0, 1, 2])
+            with redirect_stdout(io.StringIO()):
+                chosen = wizard.choose_exports(ui, roots=[data])
+        self.assertEqual([c.path for c in chosen][-1], extra)
 
     def test_needs_self_name(self):
         with tempfile.TemporaryDirectory() as d:

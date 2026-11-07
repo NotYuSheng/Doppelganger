@@ -11,7 +11,7 @@ Each picker returns ``None`` when cancelled.
 
 import os
 import sys
-from typing import List, Optional, Sequence, Set
+from typing import List, Optional, Sequence, Set, Union
 
 _UP, _DOWN, _ENTER, _SPACE, _CANCEL = "up", "down", "enter", "space", "cancel"
 
@@ -143,40 +143,61 @@ def select(
         _show_cursor()
 
 
+ACTION = "action"  # returned by multiselect when its action row is chosen
+
+
 def multiselect(
     title: str,
     options: Sequence[str],
     checked: Optional[Set[int]] = None,
     hints: Optional[Sequence[str]] = None,
-) -> Optional[List[int]]:
+    select_all: bool = False,
+    action: Optional[str] = None,
+) -> Union[List[int], str, None]:
     """Tick any number of options; returns the ticked indexes (in order), or
-    None if cancelled."""
-    if not options:
+    None if cancelled.
+
+    ``select_all`` adds a "Select all" row at the top that ticks or unticks
+    every option. ``action`` adds a plain row at the bottom (e.g. "Add another
+    export…"); choosing it returns :data:`ACTION` instead of a list.
+    """
+    if not options and not action:
         return []
     hints = list(hints or [""] * len(options))
     ticked = set(checked or ())
     if not interactive():
-        return _plain_multiselect(title, options, ticked, hints)
+        return _plain_multiselect(title, options, ticked, hints, select_all, action)
 
+    # Rows: [select-all] + options + [action]
+    top = 1 if select_all else 0
+    count = top + len(options) + (1 if action else 0)
     _enable_ansi_on_windows()
-    print(f"\n{BOLD}{title}{RESET}  {DIM}↑/↓ move · space tick · enter confirm · q cancel{RESET}")
+    print(f"\n{BOLD}{title}{RESET}  {DIM}↑/↓ move · space tick · a all · enter confirm · q cancel{RESET}")
     screen, pos = _Screen(), 0
     _hide_cursor()
     try:
         while True:
-            screen.draw([_row(o, h, i == pos, i in ticked)
-                         for i, (o, h) in enumerate(zip(options, hints))])
+            rows = []
+            if select_all:
+                rows.append(_row("Select all", "", pos == 0, len(ticked) == len(options)))
+            rows += [_row(o, h, top + i == pos, i in ticked)
+                     for i, (o, h) in enumerate(zip(options, hints))]
+            if action:
+                rows.append(_row(f"+ {action}", "", pos == count - 1))
+            screen.draw(rows)
             key = _read_key()
+            on_all = select_all and pos == 0
+            on_action = bool(action) and pos == count - 1
             if key == _UP:
-                pos = (pos - 1) % len(options)
+                pos = (pos - 1) % count
             elif key == _DOWN:
-                pos = (pos + 1) % len(options)
-            elif key == _SPACE:
-                ticked ^= {pos}
-            elif key in ("a", "A"):
+                pos = (pos + 1) % count
+            elif key in ("a", "A") or (key == _SPACE and on_all):
                 ticked = set() if len(ticked) == len(options) else set(range(len(options)))
+            elif key == _SPACE and not on_action:
+                ticked ^= {pos - top}
             elif key == _ENTER:
-                return sorted(ticked)
+                return ACTION if on_action else sorted(ticked)
             elif key == _CANCEL:
                 return None
     finally:
@@ -209,17 +230,25 @@ def _plain_select(title, options, default, hints) -> Optional[int]:
         print("Please enter one of the numbers above.")
 
 
-def _plain_multiselect(title, options, ticked, hints) -> Optional[List[int]]:
+def _plain_multiselect(title, options, ticked, hints, select_all=False, action=None):
     print(title)
     for i, (o, h) in enumerate(zip(options, hints), 1):
         print(f"  [{'x' if i - 1 in ticked else ' '}] {i}. {o}" + (f"  ({h})" if h else ""))
+    if action:
+        print(f"      +. {action}  (type 'add')")
     default = ",".join(str(i + 1) for i in sorted(ticked)) or "none"
+    extras = "'all', 'none'" + (", 'add'" if action else "") if select_all else "'none'" + (", 'add'" if action else "")
     while True:
-        answer = text("Numbers to use, comma-separated ('none' for none)", default)
+        answer = text(f"Numbers to use, comma-separated ({extras})", default)
         if answer is None or answer.lower() in ("q", "quit"):
             return None
-        if answer.lower() == "none":
+        low = answer.lower()
+        if low == "none":
             return []
+        if low == "all":
+            return list(range(len(options)))
+        if action and low == "add":
+            return ACTION
         parts = [p.strip() for p in answer.split(",") if p.strip()]
         if parts and all(p.isdigit() and 1 <= int(p) <= len(options) for p in parts):
             return sorted({int(p) - 1 for p in parts})

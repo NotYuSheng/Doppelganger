@@ -4,14 +4,15 @@
 
 1. **Exports.** ``data/`` and the current folder are scanned for exports from
    every supported app, recognised by the file/folder names each app uses.
-   The ones found are listed with all ticked; you can untick some or add a path
-   by hand.
+   The ones found are listed with all ticked (plus a "Select all" row); you can
+   untick some or add one by path.
 2. **Who you are.** Each export is test-parsed. If its app can't tell which
    sender is you (always for WhatsApp; LINE/KakaoTalk group chats), the names
    found are listed by message count and you pick yours.
 3. **Group chats**: keep / focus / skip.
-4. **Countries** whose phone numbers, postcodes and format-only IDs should also
-   be checked (ID numbers with checksums are checked for every country anyway).
+4. **Sensitive-data scan**: *Auto* (ID numbers with checksums for every
+   country), or choose countries whose phone numbers and postcodes should also
+   be checked.
 
 The answers become an ordinary :func:`doppelganger.steps.parse` call, the same
 as the flags, so the menu and the command line always behave the same.
@@ -70,6 +71,8 @@ class Plan:
             self_name=names,
             group_chats=self.group_chats,
             locales=[redaction.AUTO, *self.countries],
+            # The countries were just chosen in the menu; don't suggest flags.
+            country_hint=False,
         )
 
 
@@ -194,14 +197,14 @@ def choose_exports(ui=tui, roots: Optional[List[str]] = None) -> Optional[List[F
     found = discover(roots)
     while True:
         if found:
-            options = [_label(f) for f in found] + ["Add another export by path…"]
             picked = ui.multiselect(
                 f"Found {len(found)} export(s). Which should be used?",
-                options, checked=set(range(len(found))),
+                [_label(f) for f in found], checked=set(range(len(found))),
+                select_all=True, action="Add another export by path…",
             )
             if picked is None:
                 return None
-            if len(found) in picked:  # "add another"
+            if picked == tui.ACTION:
                 extra = _add_by_hand(ui)
                 if extra:
                     found.append(extra)
@@ -256,10 +259,23 @@ def choose_group_chats(ui=tui) -> Optional[str]:
 
 
 def choose_countries(ui=tui) -> Optional[List[str]]:
+    """Which countries' phone/postcode/format-only detectors to add.
+
+    "Auto" (the default) checks ID numbers for every country and adds nothing
+    else; only if you ask to choose is the country list shown.
+    """
+    mode = ui.select("Sensitive-data scan:", ["Auto", "Choose countries…"], default=0, hints=[
+        "recommended: ID numbers from every country, plus emails, cards, keys",
+        "also check phone numbers & postcodes for the countries you pick",
+    ])
+    if mode is None:
+        return None
+    if mode == 0:
+        return []
     codes = [c for c in redaction.available_locales() if c != redaction.UNIVERSAL]
     picked = ui.multiselect(
-        "Also check phone numbers & postcodes for (ID numbers are checked for every country):",
-        [f"{COUNTRY_NAMES.get(c, c)} ({c})" for c in codes], checked=set(),
+        "Also check phone numbers & postcodes for:",
+        [f"{COUNTRY_NAMES.get(c, c)} ({c})" for c in codes], checked=set(), select_all=True,
     )
     return None if picked is None else [codes[i] for i in picked]
 

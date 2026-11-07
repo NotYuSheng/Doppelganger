@@ -33,13 +33,12 @@ UP, DOWN, ENTER, SPACE = "\x1b[A", "\x1b[B", "\r", " "
 SCRIPT = [
     ("What would you like to do?", [DOWN] * 5, 0.35),   # walk the menu down to "auto"
     (None, [ENTER], 0.6),
-    ("Which should be used?", [ENTER], 1.6),             # keep both exports ticked
+    ("Which should be used?", [SPACE, SPACE], 0.9),      # "Select all": untick all, tick all
+    (None, [ENTER], 0.9),
     ("Which of these is you", [DOWN], 1.4),              # pick yourself in the WhatsApp chat
     (None, [ENTER], 0.6),
     ("Group chats", [ENTER], 1.3),                       # keep
-    ("Also check phone numbers", [DOWN] * 6, 0.25),      # move to Singapore
-    (None, [SPACE], 0.5),
-    (None, [ENTER], 0.8),
+    ("Sensitive-data scan", [ENTER], 1.5),               # Auto
     ("What would you like to do?", [], 3.5),             # pipeline ran; back at the menu
     (None, ["q"], 0.0),
 ]

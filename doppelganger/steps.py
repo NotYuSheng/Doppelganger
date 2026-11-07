@@ -236,6 +236,7 @@ def parse(
     scan: bool = True,
     group_chats: str = "keep",
     show_next: bool = True,
+    country_hint: bool = True,
 ) -> int:
     """Stage 1: export → conversations → (scan). Writes raw samples + report.
 
@@ -275,7 +276,7 @@ def parse(
     if scan:
         report = redactor.scan_samples(samples, locales=locales)
         redactor.write_report(report, REPORT_PATH)
-        redactor.print_summary(report, REPORT_PATH, mode="off")
+        redactor.print_summary(report, REPORT_PATH, mode="off", country_hint=country_hint)
 
     written = sharegpt.write_jsonl(samples, RAW_PATH)
     print(f"Wrote {written} raw conversation samples to {RAW_PATH}.")
@@ -299,6 +300,7 @@ def audit(
     redact: str = "replace",
     locales: Optional[List[str]] = None,
     validate: bool = True,
+    country_hint: bool = True,
 ) -> int:
     """Stage 2: review scan → redact → (optional LLM quality audit) → dataset.
 
@@ -318,7 +320,7 @@ def audit(
     # Re-derive the scan summary so audit is self-contained (regex is cheap).
     report = redactor.scan_samples(samples, locales=locales)
     redactor.write_report(report, REPORT_PATH)
-    redactor.print_summary(report, REPORT_PATH, mode=redact)
+    redactor.print_summary(report, REPORT_PATH, mode=redact, country_hint=country_hint)
 
     if redact != "off":
         before = len(samples)
@@ -477,7 +479,8 @@ def auto(
     rc = parse(show_next=False, **parse_kwargs)
     if rc:
         return rc
-    rc = audit(redact=redact, locales=parse_kwargs.get("locales"))
+    rc = audit(redact=redact, locales=parse_kwargs.get("locales"),
+               country_hint=parse_kwargs.get("country_hint", True))
     if rc:
         return rc
     if do_train:
