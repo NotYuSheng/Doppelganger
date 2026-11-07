@@ -28,7 +28,7 @@
 
 Doppelganger fine-tunes large language models (like Qwen) on your own chat conversations, capturing how *you* write. Built on top of [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory), it turns a raw chat export into a [ShareGPT](https://github.com/hiyouga/LLaMA-Factory/blob/main/data/README.md)-formatted dataset for supervised fine-tuning (SFT), then trains a LoRA adapter on it.
 
-Ingestion is **source-agnostic**: a small adapter parses each platform's export into a normalized message stream, and the rest of the pipeline (sessionizing, turn-merging, sensitive-data scanning, optional quality auditing, ShareGPT formatting) is shared. **Telegram** and **WhatsApp** are supported today, with **Discord** and other platforms planned — each slots in as a drop-in adapter.
+Ingestion is **source-agnostic**: a small adapter parses each platform's export into a normalized message stream, and the rest of the pipeline (sessionizing, turn-merging, sensitive-data scanning, optional quality auditing, ShareGPT formatting) is shared. **Telegram** and **WhatsApp** are supported today, and other platforms slot in as drop-in adapters. Some sources have been ruled out for now (WeChat, Discord) — see [`docs/adr/`](docs/adr/).
 
 > [!CAUTION]
 > **Your chat history is sensitive data, and you are responsible for it.** A model fine-tuned on it can memorize and later reproduce personal identifiers, private conversations, credentials, and messages written by other people in your chats. The built-in [sensitive-data scanning](#privacy--sensitive-data) is a **safety net, not a guarantee** — both regex and LLM detection miss real cases and raise false positives. Before training, sharing, or deploying anything: **review the dataset yourself**, get consent from others whose messages are included (especially in group chats), and comply with applicable privacy laws. Treat trained adapters and merged checkpoints as sensitive too — they can leak the data they were trained on.
@@ -348,7 +348,7 @@ Doppelganger is as much a **learning sandbox** as a tool: the aim is to explore 
 
 **Knowing if it works** — evaluation, "does it sound like me?" · interpretability, "what did it learn about me?"
 
-**More data & coverage** — more chat sources: WhatsApp, Discord, … · wider locale detector packs
+**More data & coverage** — more chat sources (see [`docs/adr/`](docs/adr/) for ruled-out ones) · wider locale detector packs
 
 > This is an experimental, for-fun project — the roadmap is a wishlist of things to explore, not a commitment.
 
