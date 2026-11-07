@@ -32,7 +32,7 @@
 </p>
 
 <p align="center">
-  <img src="demo/demo.gif" alt="Doppelganger CLI: ingest a chat export and scan it for sensitive data before training" width="760">
+  <img src="demo/demo.gif" alt="Doppelganger's interactive menu: pick your chat exports, confirm which sender is you, choose how to handle group chats and which countries to scan, then build the dataset" width="760">
 </p>
 
 ---
@@ -109,7 +109,7 @@ Doppelganger/
 
 **2. Clone and run setup**
 
-The setup scripts create a virtual environment, install pinned dependencies (LLaMA-Factory **0.9.4**), create your `.env`, and process the export into `data/chat_sharegpt.json`.
+The setup scripts create a virtual environment, install pinned dependencies (LLaMA-Factory **0.9.4**), create your `.env`, and open the **interactive menu**. It finds the exports in `data/` (from any supported app), asks which sender is you where an app can't tell, how to treat group chats and which countries to scan for sensitive data, then builds `data/chat_sharegpt.json`. Use the arrow keys, Space to tick and Enter to confirm.
 
 ```bash
 git clone https://github.com/NotYuSheng/Doppelganger.git
@@ -126,9 +126,11 @@ setup.bat         # Windows (from Command Prompt, not PowerShell)
 python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-python -m ingest --source telegram
+python -m doppelganger            # interactive menu (or: python -m ingest --source telegram)
 ```
 </details>
+
+Run `python -m doppelganger` any time to get back to the menu (parse, audit, train, merge, chat). Every step also has a non-interactive form for scripts; see [Usage](#usage).
 
 **3. (Optional) Configure LLM features**
 
@@ -152,7 +154,7 @@ llamafactory-cli train configs/train_lora.yaml
 
 ## Usage
 
-`python -m ingest` turns a raw export into a training-ready dataset. Useful flags:
+The easiest way in is the interactive menu, `python -m doppelganger`. For scripts, `python -m ingest` turns exports into a training-ready dataset in one command (and `python -m doppelganger parse|audit|train|auto` run single steps). Useful flags:
 
 | Flag | Default | Description |
 |------|---------|-------------|

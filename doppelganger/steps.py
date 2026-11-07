@@ -235,6 +235,7 @@ def parse(
     locales: Optional[List[str]] = None,
     scan: bool = True,
     group_chats: str = "keep",
+    show_next: bool = True,
 ) -> int:
     """Stage 1: export → conversations → (scan). Writes raw samples + report.
 
@@ -278,8 +279,20 @@ def parse(
 
     written = sharegpt.write_jsonl(samples, RAW_PATH)
     print(f"Wrote {written} raw conversation samples to {RAW_PATH}.")
-    print(f"Next: review {REPORT_PATH}, then run `audit`.")
+    if show_next:
+        print(f"Next: review {REPORT_PATH}, then run `audit`.")
     return 0
+
+
+def _previous_locales() -> Optional[List[str]]:
+    """The detector selection the last ``parse`` scanned with (from its report),
+    so ``audit`` redacts with the same countries chosen in the guided setup."""
+    try:
+        with open(REPORT_PATH, encoding="utf-8") as f:
+            locales = json.load(f).get("locales")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return locales if isinstance(locales, list) and locales else None
 
 
 def audit(
@@ -298,6 +311,9 @@ def audit(
 
     samples = sharegpt.load_jsonl_samples(RAW_PATH)
     print(f"Loaded {len(samples)} conversation samples from {RAW_PATH}.")
+
+    if locales is None:
+        locales = _previous_locales()
 
     # Re-derive the scan summary so audit is self-contained (regex is cheap).
     report = redactor.scan_samples(samples, locales=locales)
@@ -442,6 +458,7 @@ def auto(
     do_train: bool = False,
     redact: str = "replace",
     gpus: Optional[str] = None,
+    show_banner: bool = True,
     **parse_kwargs,
 ) -> int:
     """Run the pipeline end-to-end, unattended (like the old one-shot ingest).
@@ -450,11 +467,14 @@ def auto(
     chains training. Redaction defaults to ``replace`` so it never trains on raw
     PII without an explicit opt-out (``redact='off'``).
     """
-    banner.print_banner()
-    print("=== auto: running the full pipeline (no review pause) ===")
+    if show_banner:
+        banner.print_banner()
+    print("\n=== auto: running the full pipeline (no review pause) ===")
     if redact == "off":
         print("WARNING: --redact off — sensitive data will NOT be removed.")
-    rc = parse(**parse_kwargs)
+    # audit re-scans, so skip parse's own scan and its "next step" hints.
+    parse_kwargs.setdefault("scan", False)
+    rc = parse(show_next=False, **parse_kwargs)
     if rc:
         return rc
     rc = audit(redact=redact, locales=parse_kwargs.get("locales"))

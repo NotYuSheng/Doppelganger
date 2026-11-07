@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # Cross-platform setup for Linux / macOS (Windows users: run setup.bat).
-# Creates a venv, installs pinned dependencies, and processes your Telegram
-# export into a training-ready ShareGPT dataset.
+# Creates a venv, installs pinned dependencies, then opens the guided menu
+# (python -m doppelganger) to turn your chat exports into a training-ready
+# dataset.
 #
 set -euo pipefail
 
@@ -24,22 +25,27 @@ if [ ! -f .env ]; then
   echo "      Created .env from example.env — edit it to enable optional LLM features."
 fi
 
-echo "[4/4] Processing Telegram export (data/result.json -> data/chat_sharegpt.json)..."
+echo "[4/4] Preparing your dataset..."
 mkdir -p data
-if [ ! -f data/result.json ]; then
-  echo "      data/result.json not found. Place your Telegram export there, then re-run." >&2
-  exit 1
+if [ -t 0 ] && [ -t 1 ]; then
+  # Guided menu: finds your exports in data/, asks who you are, builds the dataset.
+  ./venv/bin/python -m doppelganger
+elif [ -f data/result.json ]; then
+  ./venv/bin/python -m ingest --source telegram
+else
+  echo "      No terminal for the guided setup and no data/result.json found."
+  echo "      Put your chat export(s) in data/ (see docs/sources/README.md), then run:"
+  echo "        ./venv/bin/python -m doppelganger"
 fi
-./venv/bin/python -m ingest --source telegram
 
 cat <<'EOF'
 
-All steps completed successfully.
+Setup complete.
 
-Next, activate the environment and launch training:
+Run the menu any time (parse, audit, train, merge, chat):
 
   source venv/bin/activate
-  llamafactory-cli train configs/train_lora.yaml
+  python -m doppelganger
 
-See README.md for export/merge and inference instructions.
+See README.md for training, merging and inference.
 EOF

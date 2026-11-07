@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Build the CLI banner (ingest/banner.py) and the README title-card GIF.
+"""Build the CLI banner (ingest/banner.py) and the README demo GIF.
 
 - ingest/banner.py: lean parrot + amber wordmark, printed at CLI startup.
-- demo/demo.gif: a richer "title card" — tagline, parrot + gradient wordmark,
-  a keyword line, a version box, and a made-by line — rendered with agg.
+- demo/demo.gif: a real recording of ``python -m doppelganger`` (menu and
+  guided setup, then the pipeline) made by demo/record_demo.py and rendered
+  with agg.
 """
-import json
 import os
 import subprocess
+import sys
 
 import pyfiglet
 
@@ -15,14 +16,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AGG = os.environ.get("AGG", "agg")
 GAP = "   "
 
-TAGLINE = "fine-tune an LLM on your chat history to write like you"
-KEYWORDS = "ingest  ·  scan  ·  redact  ·  audit  ·  fine-tune"
-VERSIONS = "Python 3.11–3.13   ·   LLaMA-Factory 0.9.4   ·   local LLM"
-MADEBY = "made by @NotYuSheng"
-
 AMBER = (242, 176, 76)
-GRAD0, GRAD1 = (255, 196, 84), (233, 84, 64)   # gold -> coral, vertical gradient
-DIM = (140, 140, 150)
 
 RESET = "\x1b[0m"
 
@@ -44,21 +38,6 @@ WW = max(len(l) for l in word)
 BLOCK_W = PW + len(GAP) + WW
 
 
-def _solid(rgb, s):
-    return f"\x1b[1;38;2;{rgb[0]};{rgb[1]};{rgb[2]}m{s}{RESET}" if s.strip() else s
-
-
-def _lerp(t):
-    """Colour at fraction t along the top->bottom gradient."""
-    return tuple(round(GRAD0[k] + (GRAD1[k] - GRAD0[k]) * t) for k in range(3))
-
-
-def _center(plain, rgb=None, width=BLOCK_W):
-    pad = max(0, (width - len(plain)) // 2)
-    body = _solid(rgb, plain) if rgb else plain
-    return " " * pad + body
-
-
 def lean_rows(on, off):
     """Parrot + wordmark only (for the CLI banner)."""
     r = []
@@ -67,23 +46,6 @@ def lean_rows(on, off):
         wl = f"{on}{wl}{off}" if wl else ""
         r.append((pl.ljust(PW) + GAP + wl).rstrip())
     return r
-
-
-def card_rows():
-    """The richer title card (coloured) for the GIF."""
-    rows = ["", _center(TAGLINE, DIM), ""]
-    n = max(1, len(word) - 1)
-    for i, pl in enumerate(parrot):
-        j = i - TOP
-        wl = _solid(_lerp(j / n), word[j]) if 0 <= j < len(word) else ""
-        rows.append(pl.ljust(PW) + GAP + wl)
-    rows += ["", _center(KEYWORDS, AMBER), ""]
-    box = len(VERSIONS) + 2
-    rows.append(_center("┌" + "─" * box + "┐", DIM))
-    rows.append(_center("│ " + VERSIONS + " │", DIM))
-    rows.append(_center("└" + "─" * box + "┘", DIM))
-    rows += ["", _center(MADEBY, DIM)]
-    return rows
 
 
 def write_banner_module():
@@ -106,30 +68,18 @@ def write_banner_module():
 
 
 def render_gif():
-    card = card_rows()
-    events, t = [], 0.0
-    def emit(d, dt):
-        nonlocal t
-        t += dt
-        events.append([round(t, 3), "o", d])
-    emit("\x1b[?25l", 0.0)            # hide cursor from the first frame (no pointer in the GIF)
-    for line in card:
-        emit(line + "\r\n", 0.08)
-    emit("", 2.4)                     # hold on the finished card
-
-    cast = os.path.join(ROOT, "demo/demo.cast")
-    with open(cast, "w", encoding="utf-8") as f:
-        f.write(json.dumps({"version": 2, "width": BLOCK_W + 6, "height": len(card) + 2}) + "\n")
-        for ev in events:
-            f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+    """Record the real CLI session, then render it to demo/demo.gif."""
+    import record_demo
+    record_demo.record()
     subprocess.run(
-        [AGG, "--font-size", "18", "--theme", "dracula", cast,
-         os.path.join(ROOT, "demo/demo.gif")],
+        [AGG, "--font-size", "16", "--theme", "dracula", "--idle-time-limit", "2.5",
+         "--last-frame-duration", "4", record_demo.CAST, os.path.join(ROOT, "demo/demo.gif")],
         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, check=True,
     )
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     write_banner_module()
     render_gif()
-    print("\n".join(r for r in card_rows()))
+    print("wrote ingest/banner.py and demo/demo.gif")
