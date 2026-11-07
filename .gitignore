@@ -63,3 +63,10 @@ your_activity_across_facebook/
 
 # Signal chat exports (Export chat history) — never commit
 signal-export-*/
+
+# KakaoTalk chat exports — never commit
+# Android/iOS: KakaoTalkChats.txt; Windows: KakaoTalk_<date>.txt; macOS: KakaoTalk_Chat_<name>.csv
+KakaoTalkChats*.txt
+KakaoTalk_*.txt
+KakaoTalk_*.csv
+Kakaotalk_Chat_*

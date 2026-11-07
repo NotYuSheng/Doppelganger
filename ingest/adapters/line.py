@@ -19,12 +19,12 @@ so when the chat has exactly two senders the one not named in the header is
 taken as you. Otherwise ``--self-name`` is required.
 """
 
-import os
 import re
 from datetime import datetime
 from typing import List, Optional, Tuple
 
 from ingest.adapters.base import register
+from ingest.adapters.textexport import hour_24, normalize_line, resolve_self, to_messages
 from ingest.message import NormalizedMessage
 
 # Header: "[LINE] Chat history with Alice" / "[LINE] Aliceとのトーク履歴" /
@@ -89,16 +89,6 @@ def _parse_date(line: str) -> Optional[Tuple[int, int, int]]:
     return None
 
 
-def _hour_24(m: "re.Match") -> int:
-    h = int(m.group("h"))
-    marker = m.group("ampm1") or m.group("ampm2")
-    if marker in ("PM", "午後") and h < 12:
-        h += 12
-    elif marker in ("AM", "午前") and h == 12:
-        h = 0
-    return h
-
-
 def _header_partner(lines: List[str]) -> Optional[str]:
     """The chat partner's name from the header, for 1:1 chats."""
     for line in lines[:3]:
@@ -117,7 +107,7 @@ class LineAdapter:
     ) -> List[NormalizedMessage]:
         # utf-8-sig drops a BOM if present; exports often use CRLF line ends.
         with open(path, encoding="utf-8-sig") as f:
-            lines = [l.rstrip("\r\n") for l in f]
+            lines = [normalize_line(l.rstrip("\r\n")) for l in f]
 
         entries: List[list] = []  # [timestamp, sender, [text lines]]
         date: Optional[Tuple[int, int, int]] = None
@@ -143,7 +133,7 @@ class LineAdapter:
 
             m = _MSG.match(line)
             if m and date is not None:
-                ts = int(datetime(*date, _hour_24(m), int(m.group("min"))).timestamp())
+                ts = int(datetime(*date, hour_24(int(m.group("h")), m.group("ampm1") or m.group("ampm2")), int(m.group("min"))).timestamp())
                 sender, text = m.group("sender").strip(), m.group("text")
                 if not sender:
                     cur = None  # system notice with an empty sender column
@@ -173,45 +163,8 @@ class LineAdapter:
             )
 
         senders = sorted({e[1] for e in entries})
-        if not self_name:
-            partner = _header_partner(lines)
-            if partner and len(senders) == 2 and partner in senders:
-                self_name = next(s for s in senders if s != partner)
-                print(f"[line] Detected self name (the sender who isn't {partner!r}): {self_name!r}")
-            else:
-                found = ", ".join(repr(s) for s in senders)
-                raise ValueError(
-                    "Couldn't tell which sender is you in this LINE export. Pass "
-                    "--self-name with your display name exactly as it appears in "
-                    f"the chat. Senders found: {found}."
-                )
-        elif self_name not in senders:
-            print(
-                f"[line] Warning: --self-name {self_name!r} matches no sender in "
-                f"this export (found: {', '.join(repr(s) for s in senders)}). "
-                "Every message will be treated as 'not you' -> all conversations "
-                "will be dropped. Check the spelling."
-            )
-
-        chat_id = os.path.splitext(os.path.basename(path))[0] or "line"
-        messages: List[NormalizedMessage] = []
-        for ts, sender, text_lines in entries:
-            text = _clean("\n".join(text_lines))
-            if not text:
-                continue
-            messages.append(
-                NormalizedMessage(
-                    chat_id=chat_id,
-                    timestamp=ts,
-                    sender_id=sender,
-                    sender_is_self=(sender == self_name),
-                    text=text,
-                    message_id=None,
-                    reply_to_id=None,
-                )
-            )
-        print(f"[line] Parsed {len(messages)} messages.")
-        return messages
+        me = resolve_self(self.name, senders, _header_partner(lines), self_name)
+        return to_messages(self.name, path, entries, me, _clean)
 
 
 register(LineAdapter())
