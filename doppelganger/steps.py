@@ -522,6 +522,14 @@ def merge(config: Optional[str] = None, gpus: Optional[str] = None) -> int:
     return _llamafactory(["export", cfg_path], gpus=gpus)
 
 
+def _thinking_args(cfg: dict) -> List[str]:
+    """Pass the config's ``enable_thinking`` to inference, so a reasoning model
+    replies in the same mode it was trained in (see docs/models.md)."""
+    if "enable_thinking" not in cfg:
+        return []
+    return [f"--enable_thinking={str(bool(cfg['enable_thinking'])).lower()}"]
+
+
 def chat(config: Optional[str] = None, gpus: Optional[str] = None, persona: bool = True) -> int:
     """Stage 5: chat with the fine-tuned model (base + adapter, nothing merged).
 
@@ -548,7 +556,7 @@ def chat(config: Optional[str] = None, gpus: Optional[str] = None, persona: bool
         "--template", cfg.get("template", "default"),
         "--finetuning_type", "lora",
         "--infer_dtype", "bfloat16",
-    ]
+    ] + _thinking_args(cfg)
     from ingest.interview import PERSONA_PATH, load_card
     card = load_card(PERSONA_PATH) if persona else None
     if card:
@@ -574,6 +582,7 @@ def serve(config: Optional[str] = None, gpus: Optional[str] = None,
         return 1
     args = ["api", "--model_name_or_path", cfg.get("model_name_or_path", ""),
             "--template", cfg.get("template", "default"), "--infer_dtype", "bfloat16"]
+    args += _thinking_args(cfg)
     if not base:
         out = cfg.get("output_dir")
         if not out or not os.path.exists(os.path.join(out, "adapter_model.safetensors")):
