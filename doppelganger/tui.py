@@ -9,6 +9,7 @@ When stdin isn't a terminal (scripts, CI, piped input), or
 Each picker returns ``None`` when cancelled.
 """
 
+import contextlib
 import os
 import sys
 from typing import List, Optional, Sequence, Set, Union
@@ -29,31 +30,73 @@ def interactive() -> bool:
 
 
 # ── Key reading ───────────────────────────────────────────────────────────────
+@contextlib.contextmanager
+def _key_mode():
+    """Read keys directly for the whole time a picker is open.
+
+    Switching per key would let keys typed during a redraw be echoed as garbage
+    (``^[[A``) and lost. The mode is like cbreak (no echo, no line buffering)
+    but with signal keys and flow control off too, so Ctrl-C, Ctrl-\\ and Ctrl-Z
+    arrive as plain keys (they cancel the picker) instead of killing or
+    suspending the process with the terminal left in this mode, and Ctrl-S
+    can't freeze output. Output processing stays on, so drawing still works.
+    On exit, keys typed but not read are discarded so they don't spill into the
+    next prompt.
+    """
+    if os.name == "nt":
+        yield
+        return
+    import termios
+    try:
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+    except (termios.error, ValueError, OSError):  # not a terminal: nothing to set
+        yield
+        return
+    new = termios.tcgetattr(fd)
+    new[0] &= ~(termios.IXON | termios.ICRNL)                        # iflag
+    new[3] &= ~(termios.ICANON | termios.ECHO | termios.ISIG)        # lflag
+    new[6][termios.VMIN], new[6][termios.VTIME] = 1, 0
+    try:
+        termios.tcsetattr(fd, termios.TCSAFLUSH, new)
+        yield
+    finally:
+        termios.tcsetattr(fd, termios.TCSAFLUSH, old)
+
+
+@contextlib.contextmanager
+def _picker(header: str):
+    """Everything a picker needs around its loop: key mode, the title, a hidden
+    cursor that's always shown again."""
+    _enable_ansi_on_windows()
+    with _key_mode():
+        _hide_cursor()
+        try:
+            print(header)
+            yield
+        finally:
+            _show_cursor()
+
+
 def _read_key() -> str:
-    """Read one keypress and name it (an arrow, enter, …) or return the char."""
+    """Read one keypress and name it (an arrow, enter, …) or return the char.
+    Call inside :func:`_key_mode`."""
     if os.name == "nt":
         import msvcrt
         ch = msvcrt.getwch()
         if ch in ("\x00", "\xe0"):
             return {"H": _UP, "P": _DOWN}.get(msvcrt.getwch(), "")
     else:
-        import termios
-        import tty
         fd = sys.stdin.fileno()
-        old = termios.tcgetattr(fd)
-        try:
-            tty.setraw(fd)
-            ch = os.read(fd, 1).decode(errors="ignore")
-            if ch == "\x1b":
-                seq = os.read(fd, 2).decode(errors="ignore") if _ready(fd) else ""
-                return {"[A": _UP, "[B": _DOWN, "OA": _UP, "OB": _DOWN}.get(seq, _CANCEL if not seq else "")
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        ch = os.read(fd, 1).decode(errors="ignore")
+        if ch == "\x1b":
+            seq = os.read(fd, 2).decode(errors="ignore") if _ready(fd) else ""
+            return {"[A": _UP, "[B": _DOWN, "OA": _UP, "OB": _DOWN}.get(seq, _CANCEL if not seq else "")
     if ch in ("\r", "\n"):
         return _ENTER
     if ch == " ":
         return _SPACE
-    if ch in ("\x03", "q", "Q"):
+    if ch in ("\x03", "\x1c", "\x1a", "q", "Q"):  # Ctrl-C, Ctrl-\, Ctrl-Z, q
         return _CANCEL
     if ch in ("k", "K"):
         return _UP
@@ -121,26 +164,24 @@ def select(
     if not interactive():
         return _plain_select(title, options, default, hints)
 
-    _enable_ansi_on_windows()
-    print(f"\n{BOLD}{title}{RESET}  {DIM}↑/↓ move · enter select · q cancel{RESET}")
     screen, pos = _Screen(), max(0, min(default, len(options) - 1))
-    _hide_cursor()
     try:
-        while True:
-            screen.draw([_row(o, h, i == pos) for i, (o, h) in enumerate(zip(options, hints))])
-            key = _read_key()
-            if key == _UP:
-                pos = (pos - 1) % len(options)
-            elif key == _DOWN:
-                pos = (pos + 1) % len(options)
-            elif key.isdigit() and 1 <= int(key) <= len(options):
-                pos = int(key) - 1
-            elif key == _ENTER:
-                return pos
-            elif key == _CANCEL:
-                return None
-    finally:
-        _show_cursor()
+        with _picker(f"\n{BOLD}{title}{RESET}  {DIM}↑/↓ move · enter select · q cancel{RESET}"):
+            while True:
+                screen.draw([_row(o, h, i == pos) for i, (o, h) in enumerate(zip(options, hints))])
+                key = _read_key()
+                if key == _UP:
+                    pos = (pos - 1) % len(options)
+                elif key == _DOWN:
+                    pos = (pos + 1) % len(options)
+                elif key.isdigit() and 1 <= int(key) <= len(options):
+                    pos = int(key) - 1
+                elif key == _ENTER:
+                    return pos
+                elif key == _CANCEL:
+                    return None
+    except KeyboardInterrupt:  # e.g. Ctrl-C on Windows
+        return None
 
 
 ACTION = "action"  # returned by multiselect when its action row is chosen
@@ -171,37 +212,36 @@ def multiselect(
     # Rows: [select-all] + options + [action]
     top = 1 if select_all else 0
     count = top + len(options) + (1 if action else 0)
-    _enable_ansi_on_windows()
-    print(f"\n{BOLD}{title}{RESET}  {DIM}↑/↓ move · space tick · a all · enter confirm · q cancel{RESET}")
     screen, pos = _Screen(), 0
-    _hide_cursor()
+    header = f"\n{BOLD}{title}{RESET}  {DIM}↑/↓ move · space tick · a all · enter confirm · q cancel{RESET}"
     try:
-        while True:
-            rows = []
-            if select_all:
-                rows.append(_row("Select all", "", pos == 0, len(ticked) == len(options)))
-            rows += [_row(o, h, top + i == pos, i in ticked)
-                     for i, (o, h) in enumerate(zip(options, hints))]
-            if action:
-                rows.append(_row(f"+ {action}", "", pos == count - 1))
-            screen.draw(rows)
-            key = _read_key()
-            on_all = select_all and pos == 0
-            on_action = bool(action) and pos == count - 1
-            if key == _UP:
-                pos = (pos - 1) % count
-            elif key == _DOWN:
-                pos = (pos + 1) % count
-            elif key in ("a", "A") or (key == _SPACE and on_all):
-                ticked = set() if len(ticked) == len(options) else set(range(len(options)))
-            elif key == _SPACE and not on_action:
-                ticked ^= {pos - top}
-            elif key == _ENTER:
-                return ACTION if on_action else sorted(ticked)
-            elif key == _CANCEL:
-                return None
-    finally:
-        _show_cursor()
+        with _picker(header):
+            while True:
+                rows = []
+                if select_all:
+                    rows.append(_row("Select all", "", pos == 0, len(ticked) == len(options)))
+                rows += [_row(o, h, top + i == pos, i in ticked)
+                         for i, (o, h) in enumerate(zip(options, hints))]
+                if action:
+                    rows.append(_row(f"+ {action}", "", pos == count - 1))
+                screen.draw(rows)
+                key = _read_key()
+                on_all = select_all and pos == 0
+                on_action = bool(action) and pos == count - 1
+                if key == _UP:
+                    pos = (pos - 1) % count
+                elif key == _DOWN:
+                    pos = (pos + 1) % count
+                elif key in ("a", "A") or (key == _SPACE and on_all):
+                    ticked = set() if len(ticked) == len(options) else set(range(len(options)))
+                elif key == _SPACE and not on_action:
+                    ticked ^= {pos - top}
+                elif key == _ENTER:
+                    return ACTION if on_action else sorted(ticked)
+                elif key == _CANCEL:
+                    return None
+    except KeyboardInterrupt:  # e.g. Ctrl-C on Windows
+        return None
 
 
 def text(prompt: str, default: str = "") -> Optional[str]:
@@ -218,7 +258,7 @@ def text(prompt: str, default: str = "") -> Optional[str]:
 
 # ── Plain (numbered) fallbacks ────────────────────────────────────────────────
 def _plain_select(title, options, default, hints) -> Optional[int]:
-    print(title)
+    print(f"\n{title}")
     for i, (o, h) in enumerate(zip(options, hints), 1):
         print(f"  {i}. {o}" + (f"  ({h})" if h else ""))
     while True:
@@ -231,7 +271,7 @@ def _plain_select(title, options, default, hints) -> Optional[int]:
 
 
 def _plain_multiselect(title, options, ticked, hints, select_all=False, action=None):
-    print(title)
+    print(f"\n{title}")
     for i, (o, h) in enumerate(zip(options, hints), 1):
         print(f"  [{'x' if i - 1 in ticked else ' '}] {i}. {o}" + (f"  ({h})" if h else ""))
     if action:

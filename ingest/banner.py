@@ -38,6 +38,8 @@ def _colour(i: int, n: int) -> str:
 def print_banner() -> None:
     if os.environ.get("DOPPELGANGER_NO_BANNER"):
         return
+    from ingest.console import use_utf8_output
+    use_utf8_output()  # the braille art can't be written in Windows' legacy code page
     lines = _BANNER.split("\n")
     marked = [i for i, line in enumerate(lines) if "<C>" in line]
     for k, i in enumerate(marked):

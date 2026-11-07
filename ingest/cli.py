@@ -197,6 +197,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    from ingest.console import use_utf8_output
+    use_utf8_output()
     _load_dotenv()
     args = build_parser().parse_args(argv)
 
