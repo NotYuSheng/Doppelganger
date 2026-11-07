@@ -163,6 +163,8 @@ def _menu() -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    from ingest.console import use_utf8_output
+    use_utf8_output()
     steps.load_env()
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
