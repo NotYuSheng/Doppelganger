@@ -27,6 +27,7 @@
   <a href="docs/sources/instagram.md"><img src="https://img.shields.io/badge/Instagram-E4405F?style=flat&logo=instagram&logoColor=white" alt="Instagram"/></a>
   <a href="docs/sources/messenger.md"><img src="https://img.shields.io/badge/Messenger-00B2FF?style=flat&logo=messenger&logoColor=white" alt="Messenger"/></a>
   <a href="docs/sources/line.md"><img src="https://img.shields.io/badge/LINE-00C300?style=flat&logo=line&logoColor=white" alt="LINE"/></a>
+  <a href="docs/sources/signal.md"><img src="https://img.shields.io/badge/Signal-3A76F0?style=flat&logo=signal&logoColor=white" alt="Signal"/></a>
 </p>
 
 <p align="center">
@@ -100,6 +101,8 @@ Doppelganger/
 > **Using Messenger?** You need **two** downloads: *Download your information* (Messages, JSON) for older chats, and *Download secure storage data* for end-to-end encrypted chats (most chats since late 2023). Unzip both into one folder and run `python -m ingest --source messenger --input path/to/folder/`. See [docs/sources/messenger.md](docs/sources/messenger.md).
 >
 > **Using LINE?** In a chat, open the menu → *Settings* → *Export chat history* to get a `.txt`, then run `python -m ingest --source line --input "[LINE] Chat history with Alice.txt"`. See [docs/sources/line.md](docs/sources/line.md).
+>
+> **Using Signal?** *Settings → Chats → Export chat history* (without media), then run `python -m ingest --source signal --input signal-export-<timestamp>/`. See [docs/sources/signal.md](docs/sources/signal.md).
 
 **2. Clone and run setup**
 
@@ -150,7 +153,7 @@ llamafactory-cli train configs/train_lora.yaml
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--source` | `telegram` | Chat source to parse: `telegram`, `whatsapp`, `instagram`, `messenger` or `line` |
+| `--source` | `telegram` | Chat source to parse: `telegram`, `whatsapp`, `instagram`, `messenger`, `line` or `signal` |
 | `--input` | `./data/result.json` | Path to the raw export |
 | `--format` | `sharegpt` | `sharegpt` (for training) or `jsonl` (intermediate) |
 | `--self-name` | auto-detected | Override which sender is "you" |
@@ -241,7 +244,7 @@ LLM_API_BASE_URL=http://localhost:8000/v1 LLM_MODEL=Qwen/Qwen2.5-7B-Instruct \
 
 ### Keeping your data out of git
 
-Your chat export and any generated datasets are ignored by `.gitignore` (`result.json`, `*.json`, `*.jsonl`, `DataExport*/`, `*.session`, `.env`, plus Telegram media/contacts such as `*.vcard`, `*.tgs`, `*.webp`, `*.ogg`/`*.oga`, and WhatsApp exports: `WhatsApp Chat*` `.txt`/`.zip`, `_chat.txt`, and `*-WA0001.*`-style media, `*.opus`, `*.vcf`, Instagram exports: `instagram-*/`, `instagram-*.zip`, `your_instagram_activity/`, and Facebook/Messenger exports: `facebook-*/`, `facebook-*.zip`, `your_facebook_activity/`, `your_activity_across_facebook/`, and LINE exports: `[LINE]*`). Generic media (`.jpg`, `.mp4`, …) lives inside `DataExport*/`, which is ignored wholesale. As an extra safeguard, a pre-commit hook refuses to commit these files even if they are force-added. Enable it once per clone:
+Your chat export and any generated datasets are ignored by `.gitignore` (`result.json`, `*.json`, `*.jsonl`, `DataExport*/`, `*.session`, `.env`, plus Telegram media/contacts such as `*.vcard`, `*.tgs`, `*.webp`, `*.ogg`/`*.oga`, and WhatsApp exports: `WhatsApp Chat*` `.txt`/`.zip`, `_chat.txt`, and `*-WA0001.*`-style media, `*.opus`, `*.vcf`, Instagram exports: `instagram-*/`, `instagram-*.zip`, `your_instagram_activity/`, and Facebook/Messenger exports: `facebook-*/`, `facebook-*.zip`, `your_facebook_activity/`, `your_activity_across_facebook/`, LINE exports: `[LINE]*`, and Signal exports: `signal-export-*/`). Generic media (`.jpg`, `.mp4`, …) lives inside `DataExport*/`, which is ignored wholesale. As an extra safeguard, a pre-commit hook refuses to commit these files even if they are force-added. Enable it once per clone:
 
 ```bash
 git config core.hooksPath hooks
