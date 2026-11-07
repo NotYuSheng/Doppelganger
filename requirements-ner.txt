@@ -1,0 +1,5 @@
+# Optional: offline name / place / organisation detection (--ner-redact).
+# Not needed for anything else. After installing, download a model:
+#   python -m spacy download en_core_web_sm     # English
+#   python -m spacy download xx_ent_wiki_sm     # multilingual (PER / LOC / ORG)
+spacy>=3.7,<4

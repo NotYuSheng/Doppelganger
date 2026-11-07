@@ -64,6 +64,7 @@ class Plan:
     self_names: Dict[int, str] = field(default_factory=dict)  # export index -> name
     group_chats: str = "keep"
     countries: List[str] = field(default_factory=list)
+    ner: bool = False
 
     def parse_kwargs(self) -> dict:
         names = [f"{self.exports[i].source}:{n}" for i, n in sorted(self.self_names.items())]
@@ -74,6 +75,7 @@ class Plan:
             locales=[redaction.AUTO, *self.countries],
             # The countries were just chosen in the menu; don't suggest flags.
             country_hint=False,
+            ner=self.ner,
         )
 
 
@@ -275,6 +277,19 @@ def choose_countries(ui=tui) -> Optional[List[str]]:
         return None
     if mode == 0:
         return []
+    return _pick_countries(ui)
+
+
+def choose_ner(ui=tui) -> Optional[bool]:
+    """Whether to also find people's names, places and organisations (spaCy)."""
+    pick = ui.select("Also redact names, places and organisations?", ["No", "Yes"], default=0, hints=[
+        "emails, cards, IDs etc. are still caught",
+        "offline NER, needs spaCy (pip install -r requirements-ner.txt); your own name is kept",
+    ])
+    return None if pick is None else pick == 1
+
+
+def _pick_countries(ui) -> Optional[List[str]]:
     codes = [c for c in redaction.available_locales() if c != redaction.UNIVERSAL]
     picked = ui.multiselect(
         "Also check phone numbers & postcodes for:",
@@ -297,4 +312,7 @@ def run(ui=tui, roots: Optional[List[str]] = None) -> Optional[Plan]:
     countries = choose_countries(ui)
     if countries is None:
         return None
-    return Plan(exports, names, group_chats, countries)
+    ner = choose_ner(ui)
+    if ner is None:
+        return None
+    return Plan(exports, names, group_chats, countries, ner)

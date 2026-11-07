@@ -125,10 +125,10 @@ class WizardFlowTest(unittest.TestCase):
             data = _workspace(d)
             # exports: both ticked; WhatsApp self: 2nd most active ("Alex Tan");
             # group chats: focus; scan: choose countries -> SG
-            ui = FakeUI([0, 1], 1, 1, 1, None)
+            ui = FakeUI([0, 1], 1, 1, 1, None, 1)
             from ingest import redaction
             codes = [c for c in redaction.available_locales() if c != "universal"]
-            ui.answers[-1] = [codes.index("SG")]
+            ui.answers[-2] = [codes.index("SG")]
             with redirect_stdout(io.StringIO()):
                 plan = wizard.run(ui, roots=[data])
         kw = plan.parse_kwargs()
@@ -136,14 +136,15 @@ class WizardFlowTest(unittest.TestCase):
         self.assertEqual(kw["self_name"], ["whatsapp:Alex Tan"])  # Telegram detects itself
         self.assertEqual(kw["group_chats"], "focus")
         self.assertEqual(kw["locales"], ["auto", "SG"])
-        self.assertEqual(len(ui.asked), 5)
+        self.assertTrue(kw["ner"])
+        self.assertEqual(len(ui.asked), 6)
 
     def test_plan_runs_through_parse(self):
         from doppelganger import steps
         with tempfile.TemporaryDirectory() as d:
             data = _workspace(d)
             with redirect_stdout(io.StringIO()):
-                plan = wizard.run(FakeUI([0, 1], 1, 0, 0), roots=[data])
+                plan = wizard.run(FakeUI([0, 1], 1, 0, 0, 0), roots=[data])
             orig = (steps.DATA_DIR, steps.RAW_PATH, steps.REPORT_PATH)
             steps.DATA_DIR, steps.RAW_PATH, steps.REPORT_PATH = d, os.path.join(d, "raw.jsonl"), os.path.join(d, "r.json")
             try:
@@ -157,7 +158,7 @@ class WizardFlowTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             data = _workspace(d)
             for answers in ([None], [[0, 1], None], [[0, 1], 1, None], [[0, 1], 1, 0, None],
-                            [[0, 1], 1, 0, 1, None]):
+                            [[0, 1], 1, 0, 1, None], [[0, 1], 1, 0, 0, None]):
                 with redirect_stdout(io.StringIO()):
                     self.assertIsNone(wizard.run(FakeUI(*answers), roots=[data]))
 
@@ -168,7 +169,7 @@ class WizardFlowTest(unittest.TestCase):
             chat = os.path.join(d, "chat.txt")
             shutil.copy(os.path.join(ROOT, "demo", "sample_whatsapp.txt"), chat)
             from ingest.adapters import available_sources
-            ui = FakeUI(available_sources().index("whatsapp"), chat, [0], 0, 0, 0)
+            ui = FakeUI(available_sources().index("whatsapp"), chat, [0], 0, 0, 0, 0)
             with redirect_stdout(io.StringIO()) as out:
                 plan = wizard.run(ui, roots=[empty])
         self.assertIn("docs/sources/README.md", out.getvalue())
