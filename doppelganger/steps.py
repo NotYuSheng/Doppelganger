@@ -301,18 +301,32 @@ def audit(
     locales: Optional[List[str]] = None,
     validate: bool = True,
     country_hint: bool = True,
+    holdout: Optional[float] = None,
 ) -> int:
     """Stage 2: review scan → redact → (optional LLM quality audit) → dataset.
 
     Consumes the raw ``.jsonl`` from :func:`parse` and writes the training-ready
     ShareGPT dataset.
+
+    ``holdout`` keeps that fraction of conversations out of training as a test
+    set for ``eval``. ``None`` (the default) keeps whatever test set already
+    exists, so re-running audit never leaks it into training; ``0`` explicitly
+    removes it. Membership is decided on the raw conversations, before
+    redaction, so changing redaction settings keeps the same test set.
     """
+    from doppelganger import evaluate
+    try:
+        fraction = evaluate.resolve_fraction(holdout)
+    except ValueError as e:
+        print(f"error: {e}")
+        return 2
     if not parse_done():
         print(f"error: {RAW_PATH} not found — run `parse` first.")
         return 1
 
     samples = sharegpt.load_jsonl_samples(RAW_PATH)
     print(f"Loaded {len(samples)} conversation samples from {RAW_PATH}.")
+    samples, held = evaluate.split_holdout(samples, fraction)
 
     if locales is None:
         locales = _previous_locales()
@@ -326,9 +340,19 @@ def audit(
         before = len(samples)
         samples = redactor.apply(samples, redact, locales=locales)
         print(f"[redactor] Applied --redact {redact}: {before} -> {len(samples)} samples.")
+        held = redactor.apply(held, redact, locales=locales)  # the test set is redacted the same way
 
     if validate:
         samples = validate_samples(samples)  # self-disables if no LLM configured
+
+    if fraction > 0:
+        evaluate.write_holdout(held, fraction=fraction)
+        verb = "Kept the existing test set:" if holdout is None else "Kept"
+        print(f"[eval] {verb} {len(held)} conversation(s) out of training "
+              f"({evaluate.HOLDOUT_PATH}); evaluate with `eval` after training.")
+    elif holdout == 0 and evaluate.remove_holdout():
+        print("[eval] Removed the test set (--holdout 0): its conversations are in the "
+              "training data now.")
 
     written = sharegpt.write_sharegpt(samples, DATASET_PATH)
     print(f"Wrote {written} ShareGPT samples to {DATASET_PATH}.")
@@ -456,6 +480,33 @@ def chat(config: Optional[str] = None, gpus: Optional[str] = None) -> int:
     ], gpus=gpus)
 
 
+def serve(config: Optional[str] = None, gpus: Optional[str] = None,
+          base: bool = False, port: int = 8000) -> int:
+    """Serve the model behind an OpenAI-compatible API (for ``eval generate``).
+
+    By default it's the fine-tuned model (base + adapter); ``base=True`` serves
+    the base model alone, for a before/after comparison.
+    """
+    cfg_path = config or train_config()
+    try:
+        cfg = _read_yaml(cfg_path)
+    except Exception as e:  # missing/malformed config or PyYAML not installed
+        print(f"error: failed to read training config {cfg_path}: {e}")
+        return 1
+    args = ["api", "--model_name_or_path", cfg.get("model_name_or_path", ""),
+            "--template", cfg.get("template", "default"), "--infer_dtype", "bfloat16"]
+    if not base:
+        out = cfg.get("output_dir")
+        if not out or not os.path.exists(os.path.join(out, "adapter_model.safetensors")):
+            print(f"warning: no trained adapter at {out!r} — run `train` first (or use --base).")
+            return 1
+        args += ["--adapter_name_or_path", out, "--finetuning_type", "lora"]
+    os.environ["API_PORT"] = str(port)
+    print(f"Serving the {'base' if base else 'fine-tuned'} model at http://localhost:{port}/v1 "
+          "(Ctrl-C to stop). In another terminal: python -m doppelganger eval")
+    return _llamafactory(args, gpus=gpus)
+
+
 def auto(
     do_train: bool = False,
     redact: str = "replace",
@@ -501,6 +552,8 @@ STEPS = [
     ("train", "LoRA fine-tune on the dataset", train_done),
     ("merge", "Merge the LoRA adapter into the base model (optional)", lambda: False),
     ("chat", "Chat with the fine-tuned model", lambda: False),
+    ("eval", "Measure how much the model sounds like you", lambda: os.path.exists(
+        os.path.join(DATA_DIR, "eval_history.jsonl"))),
 ]
 
 

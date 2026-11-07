@@ -26,13 +26,13 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CAST = os.path.join(ROOT, "demo", "demo_cli.cast")
 # Tall enough for the banner + menu on the first screen; later output scrolls.
-COLS, ROWS = 100, 31
+COLS, ROWS = 100, 32
 
 UP, DOWN, ENTER, SPACE = "\x1b[A", "\x1b[B", "\r", " "
 
 # (text to wait for, keys to send one by one, pause before each key in seconds)
 SCRIPT = [
-    ("What would you like to do?", [DOWN] * 5, 0.35),   # walk the menu down to "auto"
+    ("What would you like to do?", [DOWN] * 6, 0.3),    # walk the menu down to "auto"
     (None, [ENTER], 0.6),
     ("Which should be used?", [SPACE, SPACE], 0.9),      # "Select all": untick all, tick all
     (None, [ENTER], 0.9),

@@ -326,6 +326,18 @@ llamafactory-cli chat \
 
 Update `--template` to match the one used during training.
 
+### Measure how much it sounds like you
+
+Keep some conversations out of training, then compare the model's replies with what you really wrote: wording (chrF), style habits (length, emoji, punctuation, lol/haha…), and a blind *"which reply is really yours?"* test, where ~50% means you can't tell. Results are saved so you can compare techniques (base vs fine-tuned, with vs without drills).
+
+```bash
+python -m doppelganger audit --holdout 0.1 && python -m doppelganger train
+python -m doppelganger serve                                  # leave running
+python -m doppelganger eval generate && python -m doppelganger eval blind
+```
+
+See [docs/evaluation.md](docs/evaluation.md).
+
 ## Activating the Environment Later
 
 After running setup once, reactivate the venv in future sessions before running any commands:

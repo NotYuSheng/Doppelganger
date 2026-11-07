@@ -43,6 +43,16 @@ def _add_parse_flags(p: argparse.ArgumentParser, with_redact: bool = False) -> N
                        help="What to do with detected sensitive data (default: replace).")
 
 
+def _fraction(value: str) -> float:
+    try:
+        f = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {value!r}")
+    if not 0 <= f < 1:
+        raise argparse.ArgumentTypeError(f"must be between 0 and 1 (e.g. 0.1 for 10%), got {value}")
+    return f
+
+
 def _locales(value: Optional[str]) -> Optional[List[str]]:
     if not value:
         return None
@@ -66,6 +76,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="What to do with detected sensitive data (default: replace).")
     a.add_argument("--redact-locales", default=None, help="Comma-separated detection locales.")
     a.add_argument("--skip-validation", action="store_true", help="Skip the optional LLM quality audit.")
+    a.add_argument("--holdout", type=_fraction, default=None,
+                   help="Keep this fraction of conversations out of training as a test set "
+                        "for `eval` (e.g. 0.1). Without it, an existing test set is kept; "
+                        "--holdout 0 removes it.")
 
     t = sub.add_parser("train", help="LoRA fine-tune on the dataset.")
     t.add_argument("--config", default=None, help="Training config (default: configs/train_lora[.local].yaml).")
@@ -93,6 +107,29 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Only this situation (e.g. advice, apology, conflict, bad_news).")
     d.add_argument("--report", action="store_true", help="Just show what's covered so far.")
 
+    sv = sub.add_parser("serve", help="Serve the model as an OpenAI-compatible API (for eval).")
+    sv.add_argument("--config", default=None, help="Training config (default: configs/train_lora[.local].yaml).")
+    sv.add_argument("--gpus", default=None, help="CUDA_VISIBLE_DEVICES.")
+    sv.add_argument("--base", action="store_true", help="Serve the base model without the adapter.")
+    sv.add_argument("--port", type=int, default=8000, help="Port (default 8000).")
+
+    ev = sub.add_parser("eval", help="Measure how much the model sounds like you.")
+    evs = ev.add_subparsers(dest="eval_command")
+    g = evs.add_parser("generate", help="Have a model answer the held-out test conversations.")
+    g.add_argument("--label", default="finetuned", help="Name for this model's replies (e.g. finetuned, base).")
+    g.add_argument("--base-url", default="http://localhost:8000/v1", help="OpenAI-compatible endpoint.")
+    g.add_argument("--model", default="doppelganger", help="Model name to request from the endpoint.")
+    g.add_argument("--limit", type=int, default=None, help="Only the first N test conversations.")
+    g.add_argument("--system-prompt", default=None, help="Optional system prompt (e.g. a persona card).")
+    evs.add_parser("score", help="chrF + style match for every model's replies.")
+    b = evs.add_parser("blind", help="Blind test: pick which reply is really yours.")
+    b.add_argument("--label", default="finetuned")
+    b.add_argument("--count", type=int, default=20)
+    j = evs.add_parser("judge", help="An LLM does the blind test (uses LLM_* settings in .env).")
+    j.add_argument("--label", default="finetuned")
+    j.add_argument("--count", type=int, default=50)
+    evs.add_parser("report", help="Compare results across models and runs.")
+
     au = sub.add_parser("auto", help="Run parse → audit end-to-end (optionally → train).")
     _add_parse_flags(au, with_redact=True)
     au.add_argument("--train", dest="do_train", action="store_true", help="Also run training after the dataset is built.")
@@ -115,7 +152,12 @@ def _dispatch(args: argparse.Namespace) -> int:
         return drill_session.run_session(count=args.count, situation=args.situation, level=args.level)
     if args.command == "audit":
         return steps.audit(redact=args.redact, locales=_locales(args.redact_locales),
-                           validate=not args.skip_validation)
+                           validate=not args.skip_validation, holdout=args.holdout)
+    if args.command == "serve":
+        return steps.serve(config=args.config, gpus=args.gpus, base=args.base, port=args.port)
+    if args.command == "eval":
+        from doppelganger import eval_menu
+        return eval_menu.dispatch(args)
     if args.command == "train":
         return steps.train(config=args.config, gpus=args.gpus, epochs=args.epochs,
                            tensorboard=args.tensorboard)
@@ -150,8 +192,10 @@ def _menu() -> int:
     from doppelganger import tui
     banner.print_banner()
     from doppelganger import drills as drill_session
+    from doppelganger import eval_menu
     runners = {
         "drills": drill_session.run_session,
+        "eval": eval_menu.run,
         "parse": lambda: _guided(steps.parse), "audit": lambda: steps.audit(country_hint=False),
         "train": steps.train,
         "merge": steps.merge, "chat": steps.chat,
