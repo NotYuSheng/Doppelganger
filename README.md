@@ -21,6 +21,12 @@
 </p>
 
 <p align="center">
+  <b>Supported chats:</b>&nbsp;
+  <a href="docs/sources/telegram.md"><img src="https://img.shields.io/badge/Telegram-26A5E4?style=flat&logo=telegram&logoColor=white" alt="Telegram"/></a>
+  <a href="docs/sources/whatsapp.md"><img src="https://img.shields.io/badge/WhatsApp-25D366?style=flat&logo=whatsapp&logoColor=white" alt="WhatsApp"/></a>
+</p>
+
+<p align="center">
   <img src="demo/demo.gif" alt="Doppelganger CLI: ingest a chat export and scan it for sensitive data before training" width="760">
 </p>
 
