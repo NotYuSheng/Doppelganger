@@ -5,12 +5,9 @@ chat export into a training-ready dataset. The pipeline is **source-agnostic**:
 a per-platform *adapter* normalizes the export into a common message stream, and
 **every stage after that is shared across all sources**.
 
-The only source-specific step is stage 1 (the adapter). For how a particular
-platform's export is parsed, see the per-source docs:
-
-- [Telegram](sources/telegram.md) — supported today
-- [WhatsApp](sources/whatsapp.md) — supported today
-- More sources drop in under [`docs/sources/`](sources/); WeChat and Discord are ruled out for now (see [`docs/adr/`](adr/))
+The only source-specific step is stage 1 (the adapter). Each supported platform
+has its own page under [`docs/sources/`](sources/) describing how its export is
+parsed. Decisions about sources we've ruled out live in [`docs/adr/`](adr/).
 
 Entry point: [`python -m ingest`](../ingest/__main__.py) →
 [`ingest/cli.py:main`](../ingest/cli.py). End-to-end flow:
