@@ -83,29 +83,11 @@ A CUDA-capable GPU is needed for training. Ingestion (parsing → dataset) runs 
 
 ### Installation
 
-**1. Export your Telegram chat**
+**1. Export your chats**
 
-In **Telegram Desktop**: `Settings > Advanced > Export Telegram Data`. Select your chat(s), choose **JSON** format (not HTML), and place the result here:
+Download an export from each app you use; see **[Exporting your chats](docs/sources/README.md)** for step-by-step instructions for Telegram, WhatsApp, Instagram, Messenger, LINE, Signal and KakaoTalk, and for combining several apps into one dataset.
 
-```
-Doppelganger/
-└── data/
-    └── result.json   ← place your export here
-```
-
-> **Note:** Telegram exports unzip to a dated folder like `DataExport_2025-07-09/result.json`. Move (or copy) that `result.json` to `data/result.json` — `setup.sh` looks for it there. Alternatively, point `python -m ingest` at the file directly with `--input path/to/result.json`.
-
-> **Using WhatsApp instead?** Export a chat (`⋮ > More > Export chat > Without media`) to get a `.txt`, then run `python -m ingest --source whatsapp --input "WhatsApp Chat with Alice.txt" --self-name "Your Name"`. See [docs/sources/whatsapp.md](docs/sources/whatsapp.md) — `--self-name` is required since WhatsApp doesn't mark which participant is you.
->
-> **Using Instagram?** Request your data in Accounts Center → *Your information and permissions* → *Download your information*, pick **Messages** and format **JSON**, unzip it, then run `python -m ingest --source instagram --input path/to/instagram-export/`. See [docs/sources/instagram.md](docs/sources/instagram.md).
->
-> **Using Messenger?** You need **two** downloads: *Download your information* (Messages, JSON) for older chats, and *Download secure storage data* for end-to-end encrypted chats (most chats since late 2023). Unzip both into one folder and run `python -m ingest --source messenger --input path/to/folder/`. See [docs/sources/messenger.md](docs/sources/messenger.md).
->
-> **Using LINE?** In a chat, open the menu → *Settings* → *Export chat history* to get a `.txt`, then run `python -m ingest --source line --input "[LINE] Chat history with Alice.txt"`. See [docs/sources/line.md](docs/sources/line.md).
->
-> **Using Signal?** *Settings → Chats → Export chat history* (without media), then run `python -m ingest --source signal --input signal-export-<timestamp>/`. See [docs/sources/signal.md](docs/sources/signal.md).
->
-> **Using KakaoTalk?** In the chat room, open settings → *Export Messages* → *Send Text Only*, then run `python -m ingest --source kakaotalk --input KakaoTalkChats.txt`. See [docs/sources/kakaotalk.md](docs/sources/kakaotalk.md).
+The quick start below uses **Telegram**, the default. In **Telegram Desktop**: `Settings > Advanced > Export Telegram Data`, choose **JSON**, then copy the exported `result.json` to `data/result.json` (that's where `setup.sh` looks).
 
 **2. Clone and run setup**
 
