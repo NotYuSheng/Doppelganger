@@ -41,6 +41,17 @@ def _add_parse_flags(p: argparse.ArgumentParser, with_redact: bool = False) -> N
     if with_redact:
         p.add_argument("--redact", choices=["off", "replace", "drop"], default="replace",
                        help="What to do with detected sensitive data (default: replace).")
+        _add_ner_flags(p)
+
+
+def _add_ner_flags(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--ner-redact", action="store_true",
+                   help="Also find names, places and organisations offline with spaCy NER "
+                        "(pip install -r requirements-ner.txt). Your own names are never redacted.")
+    p.add_argument("--ner-model", default="en_core_web_sm",
+                   help="spaCy model (default en_core_web_sm; xx_ent_wiki_sm for multilingual).")
+    p.add_argument("--ner-allow", action="append", default=[],
+                   help="A name NER should never redact (repeatable).")
 
 
 def _fraction(value: str) -> float:
@@ -76,6 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="What to do with detected sensitive data (default: replace).")
     a.add_argument("--redact-locales", default=None, help="Comma-separated detection locales.")
     a.add_argument("--skip-validation", action="store_true", help="Skip the optional LLM quality audit.")
+    _add_ner_flags(a)
     a.add_argument("--holdout", type=_fraction, default=None,
                    help="Keep this fraction of conversations out of training as a test set "
                         "for `eval` (e.g. 0.1). Without it, an existing test set is kept; "
@@ -168,7 +180,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return drill_session.run_session(count=args.count, situation=args.situation, level=args.level)
     if args.command == "audit":
         return steps.audit(redact=args.redact, locales=_locales(args.redact_locales),
-                           validate=not args.skip_validation, holdout=args.holdout)
+                           validate=not args.skip_validation, holdout=args.holdout,
+                           ner=args.ner_redact, ner_model=args.ner_model, ner_allow=args.ner_allow)
     if args.command == "serve":
         return steps.serve(config=args.config, gpus=args.gpus, base=args.base, port=args.port)
     if args.command == "eval":
@@ -187,7 +200,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             source=args.source, input_path=args.input_path, self_name=args.self_name,
             conversation_gap=args.conversation_gap, message_chain=args.message_chain,
             multi_speaker=args.multi_speaker, locales=_locales(args.redact_locales),
-            group_chats=args.group_chats,
+            group_chats=args.group_chats, ner=args.ner_redact, ner_model=args.ner_model,
+            ner_allow=args.ner_allow,
         )
     return 2
 

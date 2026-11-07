@@ -176,6 +176,26 @@ def build_parser() -> argparse.ArgumentParser:
         "(which sends chat text to a third party).",
     )
     parser.add_argument(
+        "--ner-redact",
+        action="store_true",
+        help="Also find names, places and organisations offline with spaCy NER "
+        "(optional install: pip install -r requirements-ner.txt). Your own names "
+        "are never redacted.",
+    )
+    parser.add_argument(
+        "--ner-model",
+        default="en_core_web_sm",
+        help="spaCy model for --ner-redact (default en_core_web_sm; xx_ent_wiki_sm "
+        "for multilingual).",
+    )
+    parser.add_argument(
+        "--ner-allow",
+        action="append",
+        default=[],
+        help="A name NER should never redact (repeatable). Your own names from the "
+        "exports are always allowed.",
+    )
+    parser.add_argument(
         "--allow-cloud-redaction",
         action="store_true",
         help="Permit LLM redaction against a hosted API when no local "
@@ -242,7 +262,12 @@ def main(argv=None) -> int:
         report = redactor.scan_samples(samples, locales=locales)
         if args.llm_redact:
             llm_findings = _run_llm_redaction(samples, args.allow_cloud_redaction)
-            redactor.merge_llm_findings(report, llm_findings)
+            redactor.merge_findings(report, llm_findings)
+        if args.ner_redact:
+            mine = [n for r in results for n in r.self_names] + list(args.ner_allow)
+            ner_findings = redactor.run_ner(samples, args.ner_model, mine)
+            redactor.merge_findings(report, ner_findings)
+            llm_findings = llm_findings + ner_findings
         report_path = os.path.join(os.path.dirname(output) or ".", "redaction_report.json")
         redactor.write_report(report, report_path)
         redactor.print_summary(report, report_path, mode=args.redact)
@@ -253,7 +278,7 @@ def main(argv=None) -> int:
         if skip_scan:
             print(
                 f"[redactor] Scan skipped, but --redact {args.redact} was requested — "
-                "applying regex redaction (note: --llm-redact needs the scan)."
+                "applying regex redaction (note: --llm-redact / --ner-redact need the scan)."
             )
         before = len(samples)
         samples = redactor.apply(

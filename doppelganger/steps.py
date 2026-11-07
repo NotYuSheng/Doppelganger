@@ -280,9 +280,31 @@ def parse(
 
     written = sharegpt.write_jsonl(samples, RAW_PATH)
     print(f"Wrote {written} raw conversation samples to {RAW_PATH}.")
+    _save_self_names(n for r in results for n in r.self_names)
     if show_next:
         print(f"Next: review {REPORT_PATH}, then run `audit`.")
     return 0
+
+
+SELF_NAMES_PATH = os.path.join(DATA_DIR, "self_names.json")
+
+
+def _save_self_names(names) -> None:
+    """Remember the names "you" appear under, so audit's NER pass never redacts them."""
+    try:
+        with open(SELF_NAMES_PATH, "w", encoding="utf-8") as f:
+            json.dump(sorted(set(names)), f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def _load_self_names() -> List[str]:
+    try:
+        with open(SELF_NAMES_PATH, encoding="utf-8") as f:
+            names = json.load(f)
+        return [n for n in names if isinstance(n, str)]
+    except (OSError, ValueError, TypeError):
+        return []
 
 
 def _previous_locales() -> Optional[List[str]]:
@@ -302,6 +324,9 @@ def audit(
     validate: bool = True,
     country_hint: bool = True,
     holdout: Optional[float] = None,
+    ner: bool = False,
+    ner_model: str = "en_core_web_sm",
+    ner_allow: Optional[List[str]] = None,
 ) -> int:
     """Stage 2: review scan → redact → (optional LLM quality audit) → dataset.
 
@@ -333,14 +358,22 @@ def audit(
 
     # Re-derive the scan summary so audit is self-contained (regex is cheap).
     report = redactor.scan_samples(samples, locales=locales)
+    ner_findings, ner_held = [], []
+    if ner:
+        allow = _load_self_names() + list(ner_allow or [])
+        ner_findings = redactor.run_ner(samples, ner_model, allow)
+        redactor.merge_findings(report, ner_findings)
+        if held and redact != "off":
+            ner_held = redactor.run_ner(held, ner_model, allow)
     redactor.write_report(report, REPORT_PATH)
     redactor.print_summary(report, REPORT_PATH, mode=redact, country_hint=country_hint)
 
     if redact != "off":
         before = len(samples)
-        samples = redactor.apply(samples, redact, locales=locales)
+        samples = redactor.apply(samples, redact, locales=locales, llm_findings=ner_findings)
         print(f"[redactor] Applied --redact {redact}: {before} -> {len(samples)} samples.")
-        held = redactor.apply(held, redact, locales=locales)  # the test set is redacted the same way
+        # the test set is redacted the same way
+        held = redactor.apply(held, redact, locales=locales, llm_findings=ner_held)
 
     if validate:
         samples = validate_samples(samples)  # self-disables if no LLM configured
@@ -521,6 +554,9 @@ def auto(
     redact: str = "replace",
     gpus: Optional[str] = None,
     show_banner: bool = True,
+    ner: bool = False,
+    ner_model: str = "en_core_web_sm",
+    ner_allow: Optional[List[str]] = None,
     **parse_kwargs,
 ) -> int:
     """Run the pipeline end-to-end, unattended (like the old one-shot ingest).
@@ -540,7 +576,8 @@ def auto(
     if rc:
         return rc
     rc = audit(redact=redact, locales=parse_kwargs.get("locales"),
-               country_hint=parse_kwargs.get("country_hint", True))
+               country_hint=parse_kwargs.get("country_hint", True), ner=ner,
+               ner_model=ner_model, ner_allow=ner_allow)
     if rc:
         return rc
     if do_train:

@@ -100,18 +100,22 @@ def _replace_spans(text: str, spans) -> str:
 
     Overlapping spans are **merged** so the full extent of every detected span is
     redacted — no partial leaks (e.g. a shorter span can't shadow part of a longer
-    one). Each merged region is labelled by its longest contributing span.
-    Applied right-to-left so earlier offsets stay valid.
+    one). Spans may carry a 4th item, a priority (default 1): each merged region
+    is labelled by its highest-priority span, then its longest. Regex spans get a
+    higher priority, so a validated "NRIC/FIN" isn't relabelled by an NER guess
+    that happens to overlap it. Applied right-to-left so earlier offsets stay valid.
     """
-    merged = []  # [start, end, label_cat, label_len]
-    for start, end, cat in sorted(set(spans)):
+    merged = []  # [start, end, label_cat, (priority, length)]
+    for span in sorted(set(spans)):
+        start, end, cat = span[:3]
+        rank = (span[3] if len(span) > 3 else 1, end - start)
         if merged and start < merged[-1][1]:        # overlaps the previous region
             region = merged[-1]
             region[1] = max(region[1], end)
-            if end - start > region[3]:             # longer span -> its label wins
-                region[2], region[3] = cat, end - start
+            if rank > region[3]:                    # higher priority, then longer, wins
+                region[2], region[3] = cat, rank
         else:
-            merged.append([start, end, cat, end - start])
+            merged.append([start, end, cat, rank])
     for start, end, cat, _ in reversed(merged):
         text = text[:start] + f"[{cat}]" + text[end:]
     return text
@@ -140,7 +144,8 @@ def apply(samples, mode: str, locales: Optional[Iterable[str]] = None,
         drop = False
         for ti, turn in enumerate(turns):
             text = turn.get("text", "")
-            spans = [(f.start, f.end, f.category) for f in redaction.scan_text(text, locales)]
+            # Regex (pattern/checksum-validated) spans outrank LLM/NER ones on overlap.
+            spans = [(f.start, f.end, f.category, 2) for f in redaction.scan_text(text, locales)]
             spans += llm_by_turn.get((ci, ti), [])
             if not spans:
                 new_turns.append(turn)
@@ -252,15 +257,30 @@ def llm_scan_samples(samples, client, model) -> List[dict]:
     return findings
 
 
-def merge_llm_findings(report: dict, llm_findings: List[dict]) -> dict:
-    """Fold LLM findings into a regex report (masked previews only; no raw spans)."""
-    for f in llm_findings:
+def run_ner(samples, model: str, allow) -> List[dict]:
+    """The optional NER tier (see :mod:`ingest.ner`). Returns its findings, or
+    [] with an explanation if spaCy or the model isn't installed."""
+    from ingest import ner
+    try:
+        recognise = ner.load_spacy(model)
+    except ner.NerUnavailable as e:
+        print(f"[redactor] {e}\n[redactor] Skipping NER pass.")
+        return []
+    allow = sorted({a for a in allow if a})
+    print(f"[redactor] NER scan for names, places and organisations ({model})"
+          + (f"; not redacting your own name(s): {', '.join(allow)}" if allow else "") + "...")
+    return ner.ner_scan_samples(samples, recognise, allow)
+
+
+def merge_findings(report: dict, findings: List[dict]) -> dict:
+    """Fold LLM/NER findings into a regex report (masked previews only; no raw spans)."""
+    for f in findings:
         report["findings"].append({
             "conversation": f["conversation"],
             "turn": f["turn"],
             "role": f["role"],
             "category": f["category"],
-            "detector": "llm",
+            "detector": f.get("detector", "llm"),
             "severity": f["severity"],
             "preview": f["preview"],
         })
@@ -278,3 +298,7 @@ def merge_llm_findings(report: dict, llm_findings: List[dict]) -> dict:
     report["summary"] = summary
     report["total_findings"] = len(report["findings"])
     return report
+
+
+# Backwards-compatible name.
+merge_llm_findings = merge_findings

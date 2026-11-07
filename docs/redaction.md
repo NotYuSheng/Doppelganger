@@ -58,6 +58,42 @@ Universal detectors always run. Pick your own country (and those of people you
 chat with a lot) on top of `auto` for the best coverage. If you don't name any
 country, the scan summary says so and shows how to add one.
 
+## Names, places and organisations (NER)
+
+The detectors above match **structured** data. Names, places and workplaces
+aren't structured, so there's an optional third kind of detection besides regex
+and the LLM tier: a classical named-entity recogniser, spaCy, run offline
+([`ingest/ner.py`](../ingest/ner.py)).
+
+```bash
+pip install -r requirements-ner.txt
+python -m spacy download en_core_web_sm        # English
+python -m spacy download xx_ent_wiki_sm        # multilingual (PER / LOC / ORG)
+
+python -m ingest --input ... --ner-redact --redact replace [--ner-model xx_ent_wiki_sm]
+python -m doppelganger audit --ner-redact      # also on auto
+```
+
+| spaCy label | Reported as | Severity |
+|---|---|---|
+| `PERSON`, `PER` | `PERSON` | medium |
+| `GPE`, `LOC`, `FAC` | `LOCATION` | low |
+| `ORG` | `ORG` | low |
+
+- **Your own names are never redacted.** The names you appear under in each
+  export are allowlisted automatically, including each word of a full name, so
+  "Alex Tan" also covers "Alex". `parse` remembers them for `audit` in
+  `data/self_names.json`. Add more with `--ner-allow "Name"`.
+- **Chat slang:** classical models trained on news text sometimes read slang as
+  names ("see ya" → PERSON). Entities shorter than 3 characters and common chat
+  words (ya, bro, lol, sis, …) are ignored.
+- **Regex wins on overlap:** if an NER span overlaps a regex detection, the
+  regex's category labels the redaction, since it's pattern/checksum-validated.
+- **Language:** coverage is best for the model's language. The LLM tier
+  (`--llm-redact`) handles mixed-language chat better.
+- **Not installed?** `--ner-redact` explains how to install spaCy and the model,
+  then carries on without the NER pass.
+
 ## Writing a detector
 
 A detector is a regex plus metadata, registered with `make(...)`:

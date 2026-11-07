@@ -64,6 +64,7 @@ class SourceResult:
     samples: int
     group_chats: int = 0
     group_samples: int = 0
+    self_names: List[str] = field(default_factory=list)  # names "you" appear under
 
 
 def _split_prefix(value: str) -> Tuple[Optional[str], str]:
@@ -170,8 +171,9 @@ def load_samples(
             stats=stats,
         )
         samples.extend(built)
+        mine = sorted({m.sender_id for m in messages if m.sender_is_self})
         results.append(SourceResult(spec, len(messages), len(built),
-                                    stats["group_chats"], stats["group_samples"]))
+                                    stats["group_chats"], stats["group_samples"], mine))
     return samples, results
 
 

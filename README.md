@@ -234,6 +234,18 @@ Country packs are designed to be community-contributed. Each is one drop-in file
 
 [docs/redaction.md](docs/redaction.md) explains how to write one properly, with rules of thumb and a list of countries that would make good contributions. **PRs for new countries are welcome.**
 
+### Names, places and organisations (offline NER)
+
+Regex can't recognise a friend's name or a workplace. `--ner-redact` adds an offline pass with spaCy's named-entity recogniser: people, places and organisations go into the **same report and the same `--redact` step**. **Your own names are never redacted**: the names you appear under in your exports are allowlisted automatically, and you can add more with `--ner-allow`. spaCy is an optional install:
+
+```bash
+pip install -r requirements-ner.txt
+python -m spacy download en_core_web_sm          # or xx_ent_wiki_sm for multilingual chats
+python -m ingest --source telegram --ner-redact --redact replace
+```
+
+It works best for the model's language and can misread slang. Common chat words like "ya" or "bro" are ignored, and a regex-validated detection (e.g. an NRIC) always keeps its label over an NER guess. For mixed-language chats, the LLM tier below does better. Details: [docs/redaction.md](docs/redaction.md#names-places-and-organisations-ner).
+
 ### LLM-assisted redaction
 
 Regex can't catch everything (names, context-dependent secrets). With `--llm-redact`, an LLM additionally flags such spans into the **same report and the same `--redact` step** — it points at verbatim spans, never rewriting your text. To protect your data it **prefers a local endpoint**: set `LLM_API_BASE_URL` to a local OpenAI-compatible server; without one it refuses to use a hosted API unless you pass `--allow-cloud-redaction`.
