@@ -163,6 +163,7 @@ llamafactory-cli train configs/train_lora.yaml
 | `--conversation-gap` | `3600` | Seconds of silence that start a new conversation |
 | `--message-chain` | `30` | Max seconds between same-sender messages to merge into one turn |
 | `--multi-speaker` | off | In group chats, keep and label each sender on the human side (your turns are never labelled) |
+| `--group-chats` | `keep` | Chats with 3+ people: `keep`, `focus` (only direct back-and-forth with one person, plus your explicit replies) or `skip`. Group chats are noisier training data than 1:1s |
 | `--no-audit` | off | Master off-switch: skip **all** auditing (regex scan + LLM validation) and just build the dataset |
 | `--skip-redact-scan` | off | Skip only the regex sensitive-data scan |
 | `--skip-validation` | off | Skip only the LLM quality validation |

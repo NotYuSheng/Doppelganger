@@ -62,6 +62,8 @@ class SourceResult:
     spec: SourceSpec
     messages: int
     samples: int
+    group_chats: int = 0
+    group_samples: int = 0
 
 
 def _split_prefix(value: str) -> Tuple[Optional[str], str]:
@@ -137,6 +139,7 @@ def load_samples(
     conversation_gap: int = core.DEFAULT_CONVERSATION_GAP,
     message_chain: int = core.DEFAULT_MESSAGE_CHAIN,
     multi_speaker: bool = False,
+    group_chats: str = core.DEFAULT_GROUP_CHATS,
 ) -> Tuple[List[core.Sample], List[SourceResult]]:
     """Parse each export, build its samples, and combine them.
 
@@ -157,15 +160,41 @@ def load_samples(
         if namespaced:
             for m in messages:
                 m.chat_id = f"{i}:{spec.source}:{m.chat_id}"
+        stats: dict = {}
         built = core.build_samples(
             messages,
             conversation_gap=conversation_gap,
             message_chain=message_chain,
             multi_speaker=multi_speaker,
+            group_chats=group_chats,
+            stats=stats,
         )
         samples.extend(built)
-        results.append(SourceResult(spec, len(messages), len(built)))
+        results.append(SourceResult(spec, len(messages), len(built),
+                                    stats["group_chats"], stats["group_samples"]))
     return samples, results
+
+
+def print_group_advice(results: Sequence[SourceResult], group_chats: str, multi_speaker: bool) -> None:
+    """Point out group chats, whose samples are weaker training data (#46)."""
+    groups = sum(r.group_chats for r in results)
+    if not groups:
+        return
+    total = sum(r.samples for r in results)
+    from_groups = sum(r.group_samples for r in results)
+    if group_chats == "skip":
+        print(f"[groups] Skipped {groups} group chat(s) (--group-chats skip).")
+        return
+    if group_chats == "focus":
+        print(f"[groups] {groups} group chat(s): kept {from_groups} sample(s) of direct "
+              f"back-and-forth with one person (--group-chats focus).")
+        return
+    print(f"[groups] {from_groups} of {total} sample(s) come from {groups} group chat(s). "
+          "In groups most of your messages aren't replies to the message just before "
+          "them, so these samples are noisier than 1:1 chats.")
+    print("         Consider --group-chats focus (keep only direct exchanges with one "
+          "person) or --group-chats skip"
+          + ("" if multi_speaker else ", or at least --multi-speaker to keep who said what") + ".")
 
 
 def _parse_with_names(spec: SourceSpec):

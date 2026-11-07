@@ -136,6 +136,15 @@ def build_parser() -> argparse.ArgumentParser:
         "Default collapses the other side into one speaker.",
     )
     parser.add_argument(
+        "--group-chats",
+        choices=list(core.GROUP_CHAT_MODES),
+        default=core.DEFAULT_GROUP_CHATS,
+        help="How to use chats with more than two people. 'keep' (default) uses "
+        "them like 1:1 chats; 'focus' keeps only stretches where you and one other "
+        "person talk directly (plus your explicit replies, where the source has "
+        "reply links); 'skip' leaves them out.",
+    )
+    parser.add_argument(
         "--redact",
         choices=["off", "replace", "drop"],
         default="off",
@@ -206,12 +215,14 @@ def main(argv=None) -> int:
             conversation_gap=args.conversation_gap,
             message_chain=args.message_chain,
             multi_speaker=args.multi_speaker,
+            group_chats=args.group_chats,
         )
     except sources.SourceLoadError as e:  # missing file, bad export, unknown self, ...
         print(f"error: {e}", file=sys.stderr)
         return 1
     print(f"Extracted {len(samples)} conversation samples.")
     sources.print_summary(results)
+    sources.print_group_advice(results, args.group_chats, args.multi_speaker)
 
     # --no-audit is the master off-switch; the granular flags disable one half.
     skip_scan = args.no_audit or args.skip_redact_scan

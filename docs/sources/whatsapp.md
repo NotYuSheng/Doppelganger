@@ -89,13 +89,12 @@ python -m ingest --source whatsapp \
 
 ## 1:1 vs. group chats
 
-Both work, but **1:1 chats give the best results** — every message from the other
-person genuinely prompted your reply, so the user/assistant pairing is clean. In
-a group chat the other participants collapse into a single "user" by default;
-pass `--multi-speaker` to keep them labelled (`Bob: ...`). Group data is noisier
-regardless (many of your messages aren't direct replies to the preceding one) —
-this is a shared-pipeline limitation independent of WhatsApp, tracked in
-[#46](https://github.com/NotYuSheng/Doppelganger/issues/46).
+As with every source, **1:1 chats give the best results**. In a group chat
+most of your messages aren't replies to the message just before them, so the
+samples are noisier. `--group-chats focus` keeps only the stretches where you and
+one other person talk directly, and `--group-chats skip` leaves group chats
+out. `--multi-speaker` keeps each other sender labelled (`Bob: ...`). See
+[group chats](../data-pipeline.md#group-chats).
 
 ## Output
 
