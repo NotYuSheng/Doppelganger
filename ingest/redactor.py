@@ -20,7 +20,8 @@ from typing import Iterable, List, Optional
 
 from ingest import redaction
 
-DEFAULT_LOCALES = ["SG"]  # universal detectors always run in addition to these
+# "auto": universal detectors + every country's high-precision detectors.
+DEFAULT_LOCALES = redaction.DEFAULT_LOCALES
 _MAX_CONSECUTIVE_LLM_FAILURES = 5  # abort the LLM pass if the endpoint keeps failing
 
 
@@ -69,6 +70,9 @@ def write_report(report: dict, path: str) -> None:
 
 
 def print_summary(report: dict, report_path: str, mode: str = "off") -> None:
+    hint = redaction.country_hint(report.get("locales", []))
+    if hint:
+        print(f"[redactor] Note: {hint}")
     n = report["total_findings"]
     if n == 0:
         print("[redactor] No sensitive data detected by regex scan.")

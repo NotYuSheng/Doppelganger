@@ -229,7 +229,9 @@ To make that review practical, ingestion runs a **regex-based scan** over the bu
   API_KEY        1 hit(s) in   1 conversation(s)  [high]
 ```
 
-Detection works everywhere out of the box. **Universal detectors** — email, payment cards (checksum-validated), IP/MAC addresses, API keys and private keys — aren't tied to any country and always run. On top of those, optional **locale packs** add country-specific identifiers (national IDs, local phone/postal formats).
+Detection works everywhere out of the box. **Universal detectors** (email, payment cards and IBANs, both checksum-validated, IP/MAC addresses, API keys and private keys) always run. **Country packs** add national IDs, phone numbers and postcodes: Brazil, Canada, China, India, Malaysia, Singapore, the UK and the US so far.
+
+By default (`--redact-locales auto`) every country's **high-precision** detectors run for everyone, i.e. ID numbers backed by a checksum and a distinctive structure, since your chats can include friends from anywhere. Noisier detectors (phone numbers, postcodes, format-only IDs) run only for the countries you add, e.g. `--redact-locales auto,SG,US`. See [docs/redaction.md](docs/redaction.md) for the full list.
 
 Once you've reviewed the report, act on it:
 
@@ -241,13 +243,9 @@ python -m ingest --source telegram --skip-redact-scan  # opt out entirely
 
 ### Add coverage for your country
 
-Locale packs are built to be community-contributed: each is a single drop-in module under [`ingest/redaction/`](ingest/redaction/), needing no changes to the scanner or pipeline. Adding one is three steps:
+Country packs are designed to be community-contributed. Each is one drop-in file, `ingest/redaction/<cc>.py`, picked up automatically with no changes to the scanner or pipeline. A detector is a regex plus a validator (checksum, real date, reserved ranges) and some required metadata: a precision tier, a spec reference, and examples it must and must not catch. A shared test checks every detector against its own examples, so a new pack is tested the moment it's added.
 
-1. Copy an existing pack to `ingest/redaction/<cc>.py` (your ISO country code).
-2. Register detectors with `make(...)` and `locale="<CC>"`. Back each pattern with a checksum/validator where the identifier has one — that precision is what keeps the report trustworthy instead of noisy.
-3. Import your module in `ingest/redaction/__init__.py`.
-
-Singapore ships as the worked reference ([`sg.py`](ingest/redaction/sg.py): national ID with checksum, local phone, postal code) — but the recipe is the same for any country, and **PRs for new locales are welcome**. Choose which packs run with `--redact-locales` (universal detectors always run regardless).
+[docs/redaction.md](docs/redaction.md) explains how to write one properly, with rules of thumb and a list of countries that would make good contributions. **PRs for new countries are welcome.**
 
 ### LLM-assisted redaction
 

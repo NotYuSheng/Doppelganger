@@ -112,7 +112,9 @@ so you can review it before training. See [privacy](#privacy-notes).
 
 - **Regex detectors** ([`ingest/redaction/`](../ingest/redaction/)): emails,
   phone numbers, payment cards (Luhn-checked), IP/MAC, API keys/tokens, plus
-  pluggable country ID packs (`--redact-locales`, default `SG`). Universal
+  pluggable country packs (`--redact-locales`, default `auto`: every
+  country's high-precision ID detectors; add codes such as `auto,SG` for a
+  country's phone/postcode detectors, see [redaction.md](redaction.md)). Universal
   patterns always run.
 - **Writes `data/redaction_report.json`** — every finding with `conversation`,
   `turn`, `role`, `category`, `detector`, `severity`, and a masked `preview`.
@@ -192,7 +194,7 @@ coercion.
 | `--multi-speaker` | off | 2c | Keep + label individual senders in group chats |
 | `--group-chats` | `keep` | 2c | `keep` / `focus` / `skip` for chats with 3+ people |
 | `--redact` | `off` | 4 | `off` / `replace` / `drop` |
-| `--redact-locales` | `SG` | 3 | Country ID packs for the scan |
+| `--redact-locales` | `auto` | 3 | Which detectors run: `auto`, country codes, `all`, `none` |
 | `--llm-redact` | off | 3 | LLM-assisted PII detection (local-first) |
 | `--skip-redact-scan` | off | 3 | Skip the sensitive-data scan |
 | `--skip-validation` | off | 5 | Skip the LLM quality audit |

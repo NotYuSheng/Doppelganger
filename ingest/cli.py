@@ -17,7 +17,7 @@ import sys
 
 import os.path
 
-from ingest import core, redactor, sharegpt, sources
+from ingest import core, redaction, redactor, sharegpt, sources
 from ingest.adapters import available_sources
 from ingest.validator import validate_samples
 
@@ -154,9 +154,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--redact-locales",
-        default="SG",
-        help="Comma-separated locales for sensitive-data detection (universal "
-        "patterns always run). Default: SG.",
+        default="auto",
+        help="Which sensitive-data detectors run, comma-separated. 'auto' "
+        "(default): universal + every country's high-precision detectors "
+        "(checksummed IDs). Add country codes (e.g. auto,US,IN) to also run "
+        "that country's noisier ones (phones, postcodes, format-only IDs). "
+        "'all' runs everything; 'none' only universal. Available: "
+        + ", ".join(l for l in redaction.available_locales() if l != redaction.UNIVERSAL) + ".",
     )
     parser.add_argument(
         "--skip-redact-scan",
@@ -230,7 +234,7 @@ def main(argv=None) -> int:
     if args.no_audit:
         print("[audit] All auditing disabled (--no-audit) — building dataset as-is.")
 
-    locales = [s.strip() for s in args.redact_locales.split(",") if s.strip()]
+    locales = redaction.parse_locales(args.redact_locales)
     llm_findings = []
     if not skip_scan:
         report = redactor.scan_samples(samples, locales=locales)
