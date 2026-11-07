@@ -54,6 +54,9 @@ _THREAD_FILE = re.compile(r"^message_\d+\.json$")
 # unanswered requests from strangers and spam-filtered threads.
 _SKIP_DIRS = {"message_requests", "filtered_threads"}
 
+# Message "type" values (older exports) that never carry text you wrote.
+_SYSTEM_TYPES = {"Call", "Subscribe", "Unsubscribe"}
+
 # Content Meta generates for non-text events. Matched against the whole message
 # (case-insensitive) after mojibake repair. "{name}" lines appear both as
 # "You sent an attachment." and "Alice sent an attachment.".
@@ -67,6 +70,11 @@ _SYSTEM_PATTERNS = [
         r"^(.+ )?shared a (story|post|reel|link)\.?$",
         r"^(.+ )?unsent a message\.?$",
         r"^(.+ )?(started|ended|missed) (a|an|the|your)? ?(audio |video )?call\.?$",
+        r"^the (audio |video )?(call|chat) ended\.?$",
+        r"^you called .+$",
+        r"^.+ called you\.?$",
+        r"^.+ missed your (audio |video )?call\.?$",
+        r"^you missed an? (audio |video )?call from .+$",
         r"^(.+ )?(created|named) the group.*$",
         r"^(.+ )?(added|removed) .+ (to|from) the group\.?$",
         r"^(.+ )?left the group\.?$",
@@ -147,13 +155,19 @@ def _find_profile_names(path: str) -> Set[str]:
     return names
 
 
+def _part_number(file: str) -> int:
+    """The N in ``message_N.json`` (0 for a file named anything else)."""
+    m = re.search(r"(\d+)", os.path.basename(file))
+    return int(m.group(1)) if m else 0
+
+
 def _load_thread(files: Iterable[str]):
     """Return ``(participants, messages)`` for one thread, oldest first."""
     participants: Set[str] = set()
     raw: list = []
     # message_1.json holds the newest messages; message_2.json the next-older
     # block, and so on. Read newest to oldest, then reverse the lot.
-    for file in sorted(files, key=lambda f: int(re.search(r"(\d+)", os.path.basename(f)).group(1))):
+    for file in sorted(files, key=_part_number):
         with open(file, encoding="utf-8") as f:
             data = json.load(f)
         for p in data.get("participants", []):
@@ -161,7 +175,11 @@ def _load_thread(files: Iterable[str]):
             if name:
                 participants.add(fix_mojibake(name))
         raw.extend(data.get("messages", []))
+    # Meta writes newest first, so reversing gives chronological order and
+    # keeps the original order of same-millisecond messages. The stable sort
+    # afterwards also copes with files that are already oldest-first.
     raw.reverse()
+    raw.sort(key=lambda m: m.get("timestamp_ms", 0) if isinstance(m, dict) else 0)
     return participants, raw
 
 
@@ -234,7 +252,9 @@ def parse_export(
             if not isinstance(m, dict) or "timestamp_ms" not in m or not m.get("sender_name"):
                 skipped += 1
                 continue
-            if m.get("is_unsent"):
+            # Older exports tag non-text events with a "type"; Generic and Share
+            # can carry real text, the others never do.
+            if m.get("is_unsent") or m.get("type") in _SYSTEM_TYPES:
                 continue
             text = fix_mojibake(m.get("content") or "").strip()
             if not text or _is_system(text):

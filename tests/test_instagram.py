@@ -138,6 +138,41 @@ class ParseTest(unittest.TestCase):
             msgs = InstagramAdapter().parse(d, self_name=SELF)
         self.assertEqual([m.text for m in msgs], ["real message", "real reply"])
 
+    def test_oldest_first_file_still_chronological(self):
+        # Some hand-made / third-party files are already oldest-first.
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "message_1.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"participants": [{"name": "Alice"}, {"name": SELF}], "messages": [
+                    _msg("Alice", 100, "first"), _msg(SELF, 110, "second")]}, f)
+            msgs = InstagramAdapter().parse(path, self_name=SELF)
+        self.assertEqual([m.text for m in msgs], ["first", "second"])
+
+    def test_single_file_with_nonstandard_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "messages.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"participants": [], "messages": [_msg("Alice", 100, "hi")]}, f)
+            msgs = InstagramAdapter().parse(path, self_name=SELF)
+        self.assertEqual([m.text for m in msgs], ["hi"])
+
+    def test_real_export_shapes(self):
+        # Shapes seen in public sample exports: null content, trailing space on
+        # reaction notices, mojibake'd emoji, typed Call/Share entries.
+        with tempfile.TemporaryDirectory() as d:
+            _write_thread(d, "inbox", "t", [
+                _msg("Alice", 100, "hello", is_geoblocked_for_viewer=False),
+                _msg("Alice", 101, None, photos=[{"uri": "photos/1.jpg"}]) | {"content": None},
+                _msg("Alice", 102, _mojibake("Reacted 👍 to your message ")),
+                _msg("Alice", 103, "Should we call?", type="Call", call_duration=60),
+                _msg("Alice", 104, "The video chat ended."),
+                _msg("Alice", 105, "Alice missed your call."),
+                _msg(SELF, 106, None, type="Share", share={"link": "https://x"}),
+                _msg(SELF, 107, _mojibake("👍")),
+            ])
+            msgs = InstagramAdapter().parse(d, self_name=SELF)
+        self.assertEqual([m.text for m in msgs], ["hello", "👍"])
+
     def test_requests_and_filtered_threads_skipped(self):
         with tempfile.TemporaryDirectory() as d:
             _write_thread(d, "inbox", "friend", [_msg("Alice", 100, "keep")])
