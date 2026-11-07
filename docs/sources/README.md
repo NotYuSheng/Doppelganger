@@ -35,6 +35,13 @@ adapter does with it.
 - **Group chats** make noisier training data than 1:1 chats. See
   `--group-chats` in the [pipeline docs](../data-pipeline.md#group-chats).
 
+## No exports, or gaps in them?
+
+Chat history covers whatever conversations happened to take place. [Reply
+drills](../drills.md) fill the gaps: the app shows realistic incoming messages
+(advice, disagreements, apologies, bad news, …) and you type how you'd reply.
+Answers are saved to `data/elicited.jsonl` and picked up like any other export.
+
 ## Combining apps
 
 Most people's chats are spread across apps. Pass one `--input` per export,

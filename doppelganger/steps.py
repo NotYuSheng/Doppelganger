@@ -488,8 +488,14 @@ def auto(
     return rc
 
 
+def drills_done() -> bool:
+    from ingest import drills
+    return bool(drills.load_answers(drills.DEFAULT_PATH))
+
+
 # Ordered for the menu.
 STEPS = [
+    ("drills", "Answer reply drills: create training data on purpose (optional)", drills_done),
     ("parse", "Parse export → conversations + sensitive-data scan", parse_done),
     ("audit", "Review scan → redact → training-ready dataset", audit_done),
     ("train", "LoRA fine-tune on the dataset", train_done),
