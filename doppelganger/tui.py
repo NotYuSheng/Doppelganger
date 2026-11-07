@@ -9,6 +9,7 @@ When stdin isn't a terminal (scripts, CI, piped input), or
 Each picker returns ``None`` when cancelled.
 """
 
+import contextlib
 import os
 import sys
 from typing import List, Optional, Sequence, Set, Union
@@ -29,26 +30,44 @@ def interactive() -> bool:
 
 
 # ── Key reading ───────────────────────────────────────────────────────────────
+@contextlib.contextmanager
+def _key_mode():
+    """Keep the terminal in cbreak mode (no echo, no line buffering) for the
+    whole time a picker is open. Switching per key would let keys typed during
+    a redraw be echoed as garbage (``^[[A``) and lost. cbreak, unlike raw mode,
+    leaves output processing alone, so drawing still works."""
+    if os.name == "nt":
+        yield
+        return
+    import termios
+    import tty
+    try:
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+    except (termios.error, ValueError, OSError):  # not a terminal: nothing to set
+        yield
+        return
+    try:
+        tty.setcbreak(fd)
+        yield
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
 def _read_key() -> str:
-    """Read one keypress and name it (an arrow, enter, …) or return the char."""
+    """Read one keypress and name it (an arrow, enter, …) or return the char.
+    Call inside :func:`_key_mode`."""
     if os.name == "nt":
         import msvcrt
         ch = msvcrt.getwch()
         if ch in ("\x00", "\xe0"):
             return {"H": _UP, "P": _DOWN}.get(msvcrt.getwch(), "")
     else:
-        import termios
-        import tty
         fd = sys.stdin.fileno()
-        old = termios.tcgetattr(fd)
-        try:
-            tty.setraw(fd)
-            ch = os.read(fd, 1).decode(errors="ignore")
-            if ch == "\x1b":
-                seq = os.read(fd, 2).decode(errors="ignore") if _ready(fd) else ""
-                return {"[A": _UP, "[B": _DOWN, "OA": _UP, "OB": _DOWN}.get(seq, _CANCEL if not seq else "")
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        ch = os.read(fd, 1).decode(errors="ignore")
+        if ch == "\x1b":
+            seq = os.read(fd, 2).decode(errors="ignore") if _ready(fd) else ""
+            return {"[A": _UP, "[B": _DOWN, "OA": _UP, "OB": _DOWN}.get(seq, _CANCEL if not seq else "")
     if ch in ("\r", "\n"):
         return _ENTER
     if ch == " ":
@@ -122,8 +141,13 @@ def select(
         return _plain_select(title, options, default, hints)
 
     _enable_ansi_on_windows()
-    print(f"\n{BOLD}{title}{RESET}  {DIM}↑/↓ move · enter select · q cancel{RESET}")
     screen, pos = _Screen(), max(0, min(default, len(options) - 1))
+    with _key_mode():
+        print(f"\n{BOLD}{title}{RESET}  {DIM}↑/↓ move · enter select · q cancel{RESET}")
+        return _select_loop(screen, options, hints, pos)
+
+
+def _select_loop(screen, options, hints, pos) -> Optional[int]:
     _hide_cursor()
     try:
         while True:
@@ -139,6 +163,8 @@ def select(
                 return pos
             elif key == _CANCEL:
                 return None
+    except KeyboardInterrupt:
+        return None
     finally:
         _show_cursor()
 
@@ -172,7 +198,12 @@ def multiselect(
     top = 1 if select_all else 0
     count = top + len(options) + (1 if action else 0)
     _enable_ansi_on_windows()
-    print(f"\n{BOLD}{title}{RESET}  {DIM}↑/↓ move · space tick · a all · enter confirm · q cancel{RESET}")
+    with _key_mode():
+        print(f"\n{BOLD}{title}{RESET}  {DIM}↑/↓ move · space tick · a all · enter confirm · q cancel{RESET}")
+        return _multiselect_loop(options, hints, ticked, select_all, action, top, count)
+
+
+def _multiselect_loop(options, hints, ticked, select_all, action, top, count):
     screen, pos = _Screen(), 0
     _hide_cursor()
     try:
@@ -200,6 +231,8 @@ def multiselect(
                 return ACTION if on_action else sorted(ticked)
             elif key == _CANCEL:
                 return None
+    except KeyboardInterrupt:
+        return None
     finally:
         _show_cursor()
 

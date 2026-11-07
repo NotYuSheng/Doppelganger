@@ -149,7 +149,6 @@ def _menu() -> int:
         options += [f"  {'auto':<6}", f"  {'quit':<6}"]
         hints += ["guided setup, then parse → audit in one go", ""]
         keys += ["auto", "quit"]
-        print()
         choice = tui.select("What would you like to do?", options, hints=hints)
         if choice is None or keys[choice] == "quit":
             return 0
