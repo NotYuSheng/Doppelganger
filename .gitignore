@@ -43,3 +43,9 @@ _chat.txt
 *-WA[0-9][0-9][0-9][0-9]*.*
 *.opus
 *.vcf
+
+# Instagram "Download Your Information" exports — never commit
+# The zip and its folder are named like instagram-<username>-2026-11-07-<id>
+instagram-*/
+instagram-*.zip
+your_instagram_activity/
