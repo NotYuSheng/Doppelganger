@@ -70,3 +70,6 @@ KakaoTalkChats*.txt
 KakaoTalk_*.txt
 KakaoTalk_*.csv
 Kakaotalk_Chat_*
+
+# Demo recording intermediates (demo/record_demo.py)
+demo/*.cast

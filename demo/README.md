@@ -8,9 +8,11 @@ this is needed to run Doppelganger — it's tooling for regenerating the visuals
 | `parrot-mirror.jpg` | Source image for the mascot |
 | `mascot.txt` | The parrot converted to braille ASCII (committed art) |
 | `sample_export.json` | **Synthetic** Telegram export used by the demo (safe, fake PII) |
-| `demo.gif` | The README demo (ingest + sensitive-data scan) |
+| `sample_whatsapp.txt` | **Synthetic** WhatsApp chat used by the demo |
+| `demo.gif` | The README demo: a real recording of the interactive menu and guided setup |
+| `record_demo.py` | Drives `python -m doppelganger` in a pseudo-terminal with scripted keys and records it |
 | `img2ascii.py` | Convert an image to ASCII (brightness ramp) |
-| `build_final.py` | Rebuild `ingest/banner.py` and `demo/demo.gif` |
+| `build_final.py` | Rebuild `ingest/banner.py`, record the demo, render `demo/demo.gif` |
 
 ## Regenerating
 
@@ -27,5 +29,6 @@ Then:
 
 ```bash
 python demo/img2ascii.py parrot-mirror.jpg 72   # preview the mascot conversion
-python demo/build_final.py                      # rewrite the banner + demo.gif
+python demo/build_final.py                      # rewrite the banner, record + render demo.gif
+python demo/record_demo.py                      # just record, to demo/demo_cli.cast (Linux/macOS)
 ```

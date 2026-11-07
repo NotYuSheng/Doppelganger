@@ -69,8 +69,9 @@ def write_report(report: dict, path: str) -> None:
         json.dump(report, f, indent=2, ensure_ascii=False)
 
 
-def print_summary(report: dict, report_path: str, mode: str = "off") -> None:
-    hint = redaction.country_hint(report.get("locales", []))
+def print_summary(report: dict, report_path: str, mode: str = "off",
+                  country_hint: bool = True) -> None:
+    hint = redaction.country_hint(report.get("locales", [])) if country_hint else None
     if hint:
         print(f"[redactor] Note: {hint}")
     n = report["total_findings"]

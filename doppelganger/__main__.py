@@ -1,6 +1,6 @@
 """Doppelganger runner entry point.
 
-    python -m doppelganger              # interactive numbered menu
+    python -m doppelganger              # interactive menu with a guided setup
     python -m doppelganger parse ...    # named subcommand
     python -m doppelganger auto         # run the whole pipeline unattended
 """
@@ -121,38 +121,46 @@ def _dispatch(args: argparse.Namespace) -> int:
 
 
 # ── Interactive menu ──────────────────────────────────────────────────────────
-def _menu() -> int:
-    banner.print_banner()
-    while True:
-        print("\nDoppelganger — pick a step (q to quit):")
-        for i, (name, desc, done) in enumerate(steps.STEPS, 1):
-            mark = "✓" if done() else " "
-            print(f"  [{mark}] {i}. {name:6} — {desc}")
-        print("      a. auto   — run parse → audit end-to-end")
-        try:
-            choice = input("> ").strip().lower()
-        except EOFError:       # non-interactive stdin
-            print()
-            return 0
-        except KeyboardInterrupt:  # Ctrl-C
-            print()
-            return 130
+def _guided(step_fn) -> int:
+    """Run parse/auto after the guided setup (pick exports, who you are, …)."""
+    from doppelganger import wizard
+    plan = wizard.run()
+    if plan is None:
+        print("Cancelled.")
+        return 0
+    extra = {"show_banner": False} if step_fn is steps.auto else {}
+    return step_fn(**plan.parse_kwargs(), **extra)
 
-        if choice in ("q", "quit", "exit", ""):
+
+def _menu() -> int:
+    from doppelganger import tui
+    banner.print_banner()
+    runners = {
+        "parse": lambda: _guided(steps.parse), "audit": lambda: steps.audit(country_hint=False),
+        "train": steps.train,
+        "merge": steps.merge, "chat": steps.chat,
+    }
+    while True:
+        options, hints, keys = [], [], []
+        for name, desc, done in steps.STEPS:
+            options.append(f"{'✓' if done() else ' '} {name:<6}")
+            hints.append(desc)
+            keys.append(name)
+        options += [f"  {'auto':<6}", f"  {'quit':<6}"]
+        hints += ["guided setup, then parse → audit in one go", ""]
+        keys += ["auto", "quit"]
+        print()
+        choice = tui.select("What would you like to do?", options, hints=hints)
+        if choice is None or keys[choice] == "quit":
             return 0
-        if choice == "a":
-            steps.auto()
+        name = keys[choice]
+        try:
+            rc = _guided(steps.auto) if name == "auto" else runners[name]()
+        except KeyboardInterrupt:
+            print("\nInterrupted.")
             continue
-        if choice.isdigit() and 1 <= int(choice) <= len(steps.STEPS):
-            name = steps.STEPS[int(choice) - 1][0]
-            rc = {
-                "parse": steps.parse, "audit": steps.audit, "train": steps.train,
-                "merge": steps.merge, "chat": steps.chat,
-            }[name]()
-            if rc:
-                print(f"[{name}] exited with code {rc}.")
-        else:
-            print("Unrecognized choice.")
+        if rc:
+            print(f"[{name}] exited with code {rc}.")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
