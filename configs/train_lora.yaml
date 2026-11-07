@@ -1,9 +1,10 @@
 # LoRA fine-tuning config for LLaMA-Factory.
 #   llamafactory-cli train configs/train_lora.yaml
 #
-# Defaults target Qwen1.5-1.8B-Chat. To use another model, change
-# model_name_or_path + template (see the LLaMA-Factory model table) and,
-# optionally, output_dir.
+# Defaults target Qwen1.5-1.8B-Chat (a fast smoke test, too small to really
+# sound like you). To use another model, change model_name_or_path + template
+# and, optionally, output_dir. See docs/models.md for which models fit; for
+# hybrid reasoning models (e.g. Qwen3) also set `enable_thinking: false`.
 
 ### model
 model_name_or_path: Qwen/Qwen1.5-1.8B-Chat

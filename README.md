@@ -293,11 +293,12 @@ Edit `configs/train_lora.yaml`:
 | Field | Description |
 |-------|-------------|
 | `model_name_or_path` | Hugging Face model ID or local model path |
-| `template` | Prompt template type (e.g. `qwen`, `chatml`, `default`) |
+| `template` | Prompt template type (e.g. `qwen`, `qwen3`, `llama3`, `chatml`) |
+| `enable_thinking` | Reasoning models only (e.g. Qwen3): set `false` so training on chat replies doesn't teach the model to skip its reasoning |
 | `lora_target` | LoRA target modules (`all` works across architectures) |
 | `output_dir` | Destination to save the LoRA checkpoints |
 
-For example, to use `mistralai/Mistral-7B-Instruct-v0.2`, set `model_name_or_path` accordingly and `template: chatml`. Refer to the [LLaMA-Factory model table](https://github.com/hiyouga/LLaMA-Factory#supported-models) for recommended values.
+For example, to use `mistralai/Mistral-7B-Instruct-v0.2`, set `model_name_or_path` accordingly and `template: mistral`. **Which model should you pick?** [docs/models.md](docs/models.md) compares chat, reasoning, mixture-of-experts and multimodal models, sizes and hardware, the right `template` per family, and the `enable_thinking` setting reasoning models need.
 
 > **Note**: Training masks the loss to your own (assistant) turns — `train_on_prompt: false`. That's why `--multi-speaker` labels on the human side are safe: the model reads them as context but never learns to produce them.
 

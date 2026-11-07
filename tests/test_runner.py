@@ -89,5 +89,31 @@ class SummaryTest(unittest.TestCase):
         steps.summarize_run("/no/such/output_dir")
 
 
+class ThinkingArgsTest(unittest.TestCase):
+    """chat / serve pass the config's enable_thinking so reasoning models reply
+    in the mode they were trained in."""
+
+    def test_passed_only_when_set(self):
+        self.assertEqual(steps._thinking_args({}), [])
+        self.assertEqual(steps._thinking_args({"enable_thinking": False}), ["--enable_thinking=false"])
+        self.assertEqual(steps._thinking_args({"enable_thinking": True}), ["--enable_thinking=true"])
+
+    def test_chat_and_serve_include_it(self):
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            open(os.path.join(d, "adapter_model.safetensors"), "w").close()
+            cfg = {"output_dir": d, "model_name_or_path": "Qwen/Qwen3-8B", "template": "qwen3",
+                   "enable_thinking": False}
+            calls = []
+            with mock.patch.object(steps, "_read_yaml", return_value=cfg), \
+                    mock.patch.object(steps.os.path, "exists", return_value=True), \
+                    mock.patch.object(steps, "_llamafactory", side_effect=lambda a, gpus=None: calls.append(a) or 0), \
+                    mock.patch("sys.stdout"):
+                steps.chat(persona=False)
+                steps.serve()
+        self.assertTrue(all("--enable_thinking=false" in c for c in calls))
+
+
 if __name__ == "__main__":
     unittest.main()
