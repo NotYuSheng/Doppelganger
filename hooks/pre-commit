@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # Patterns that must never be committed (regex, matched against staged paths)
-BLOCK='(^|/)(result\.json|chat_dataset\.jsonl|chat_sharegpt\.json|elicited\.jsonl)$|\.session(-journal)?$|(^|/)(DataExport|ChatExport)|(^|/)\.env$|\.(vcard|tgs|webp|ogg|oga|opus|vcf)$|(^|/)WhatsApp Chat|(^|/)_chat\.txt$|-WA[0-9]{4}[^/]*\.[^/]+$|(^|/)instagram-[^/]*(/|\.zip$)|(^|/)your_instagram_activity/|(^|/)facebook-[^/]*(/|\.zip$)|(^|/)your_(facebook_activity|activity_across_facebook)/|(^|/)\[LINE\][^/]*$|(^|/)signal-export-[^/]*/|(^|/)(KakaoTalkChats[^/]*\.txt|KakaoTalk_[^/]*\.(txt|csv)|Kakaotalk_Chat_[^/]*)$'
+BLOCK='(^|/)(result\.json|chat_dataset\.jsonl|chat_sharegpt\.json|elicited\.jsonl|eval_holdout\.jsonl|eval_holdout\.meta\.json|eval_generations\.json|eval_history\.jsonl)$|\.session(-journal)?$|(^|/)(DataExport|ChatExport)|(^|/)\.env$|\.(vcard|tgs|webp|ogg|oga|opus|vcf)$|(^|/)WhatsApp Chat|(^|/)_chat\.txt$|-WA[0-9]{4}[^/]*\.[^/]+$|(^|/)instagram-[^/]*(/|\.zip$)|(^|/)your_instagram_activity/|(^|/)facebook-[^/]*(/|\.zip$)|(^|/)your_(facebook_activity|activity_across_facebook)/|(^|/)\[LINE\][^/]*$|(^|/)signal-export-[^/]*/|(^|/)(KakaoTalkChats[^/]*\.txt|KakaoTalk_[^/]*\.(txt|csv)|Kakaotalk_Chat_[^/]*)$'
 
 staged=$(git diff --cached --name-only --diff-filter=AM)
 offenders=$(printf '%s\n' "$staged" | grep -E "$BLOCK" || true)
