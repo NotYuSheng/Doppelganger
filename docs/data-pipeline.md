@@ -10,7 +10,7 @@ platform's export is parsed, see the per-source docs:
 
 - [Telegram](sources/telegram.md) — supported today
 - [WhatsApp](sources/whatsapp.md) — supported today
-- More sources drop in under [`docs/sources/`](sources/); WeChat and Discord are ruled out for now (see [`docs/adr/`](adr/))
+- More sources drop in under [`docs/sources/`](sources/); WeChat, Discord, Snapchat, SMS, QQ and Zalo are ruled out for now (see [`docs/adr/`](adr/))
 
 Entry point: [`python -m ingest`](../ingest/__main__.py) →
 [`ingest/cli.py:main`](../ingest/cli.py). End-to-end flow:
