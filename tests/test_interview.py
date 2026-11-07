@@ -133,7 +133,8 @@ class SessionTest(unittest.TestCase):
             for t in iv.TOPICS:
                 iv.save_turn(t, t.question, ["answer"], path)
             _, out, _, card = self._run([], d, ui=FakeUI(0))
-        self.assertIn("**A recent story**", card)
+        self.assertIn("**How you text**", card)
+        self.assertNotIn("**A recent story**", card)  # stories are training data, not card
 
 
 class CardTest(unittest.TestCase):
@@ -162,6 +163,21 @@ class CardTest(unittest.TestCase):
         self.assertIn("Never invent", client.prompts[0])
         self.assertIn("lol answer 3", client.prompts[0])
         self.assertIn("Measured texting habits", client.prompts[0])
+
+    def test_card_is_a_profile_not_a_record_of_events(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "e.jsonl")
+            story = next(t for t in iv.TOPICS if t.id == "story")
+            iv.save_turn(iv.TOPICS[0], iv.TOPICS[0].question, ["i'm alex"], path)
+            iv.save_turn(story, story.question, ["went hiking and got lost lol"], path)
+            turns = iv.load_turns(path)
+            card = iv.fallback_card(turns, drills_path=path)
+            client = FakeClient("You are Alex.")
+            iv.llm_card(turns, client, "m", drills_path=path)
+        self.assertIn("i'm alex", card)
+        self.assertNotIn("hiking", card)
+        self.assertNotIn("hiking", client.prompts[0])
+        self.assertIn("Don't list specific past events", client.prompts[0])
 
     def test_style_needs_enough_text(self):
         self.assertEqual(iv.style_section(["hi", "yo"]), [])

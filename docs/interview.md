@@ -1,15 +1,22 @@
 # Persona interview: telling the model who you are
 
 Fine-tuning on your messages teaches the model **how** you write: your rhythm,
-slang and punctuation. It's bad at **what** you know and care about: your job,
-the people in your life, your opinions, what happened last week. Those facts
-rarely appear in chats, and fine-tuning needs many examples to learn even one.
+slang and punctuation. It doesn't give it a clear picture of **who** you are:
+what you do, who the important people in your life are, what you're into and
+what you care about. Those are rarely spelled out in chats.
 
-The persona interview fills that gap. It's a conversation about you, modelled
-on the life-story interviews used in research. Agents built from two-hour
+The persona interview captures that as a **persona card**: a short profile of
+you that sits in the model's system prompt for every reply. It's a conversation
+about you, modelled on the life-story interviews used in research. Agents built from two-hour
 interview transcripts matched people's own survey answers 85% as well as the
 people did themselves two weeks later ([Park et al.
 2024](https://arxiv.org/abs/2411.10109)).
+
+> **A profile, not a memory.** The card is deliberately small and static: a few
+> paragraphs about who you are, the same for every reply. It doesn't let the
+> model look up specific past conversations, events or details from your
+> message history. That's retrieval-augmented memory, explored separately in
+> [#16](https://github.com/NotYuSheng/Doppelganger/issues/16).
 
 ```bash
 python -m doppelganger interview          # or: menu → interview
@@ -27,7 +34,8 @@ Nine topics, one after another:
 6. **Opinions**: what you feel strongly about
 7. **What matters to you**: values, goals
 8. **How you text**: emoji, slang, catchphrases
-9. **A recent story**
+9. **A recent story**: mostly so there's an answer in your natural
+   storytelling voice as training data. The card doesn't list events.
 
 **How in-depth?** You choose up front, with a time estimate (about a minute
 per question):
@@ -51,9 +59,9 @@ continue from the next topic.
 
 ## What you get
 
-**1. A persona card** (`data/persona.md`) describing who you are: background,
-work, the people in your life (and how you talk to each), your week, interests,
-opinions, values, stories, and a **How you text** section. That section
+**1. A persona card** (`data/persona.md`): a short profile of who you are,
+covering background, work, the people in your life (and how you talk to each),
+your week, interests, opinions, values, and a **How you text** section. That section
 combines what you said with habits measured from your own answers: reply
 length, lowercase, full stops, emoji, lol/haha. With an LLM, the card is
 written from your transcript, and the prompt forbids inventing anything you

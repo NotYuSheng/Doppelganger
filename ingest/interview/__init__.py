@@ -12,11 +12,16 @@ It produces two things:
 * **Training pairs**: each interviewer question plus the answer, in the user's
   own words. Saved to ``data/elicited.jsonl`` (``kind: "interview"``) next to
   the reply-drill answers, and read by the ``elicited`` source.
-* **A persona card** (``data/persona.md``): facts, people, interests and values
-  from the transcript, plus a texting-style section measured from the user's
-  own answers. It becomes the system prompt for ``chat`` and can be scored with
-  ``eval generate --persona``. Fine-tuning learns *how* you write; the card
-  carries *what* you know and care about, which fine-tuning is bad at.
+* **A persona card** (``data/persona.md``): a short, static profile of who the
+  person is (background, work, people, interests, opinions, values) from the
+  transcript, plus a texting-style section measured from their own answers. It
+  becomes the system prompt for ``chat`` and can be scored with ``eval generate
+  --persona``. Fine-tuning learns *how* you write; the card gives the model a
+  picture of *who* you are.
+
+  The card is a profile, not a memory: it doesn't let the model look up
+  specific past conversations or events. That's retrieval-augmented memory,
+  issue #16.
 
 With an LLM (local by default), follow-up questions react to the answers and
 the card is written from the transcript. Without one, fixed follow-ups are
@@ -196,9 +201,14 @@ def _user_texts(turns: Sequence[dict], drills_path: str) -> List[str]:
     return texts
 
 
+# Topics whose answers are training data only, not part of the card: the card is
+# a profile of who you are, not a record of events (that's retrieval, #16).
+_NOT_IN_CARD = {"story"}
+
+
 def fallback_card(turns: Sequence[dict], drills_path: str = ELICITED_PATH) -> str:
     """A persona card without an LLM: the answers by topic, plus measured style."""
-    by_topic = transcript(turns)
+    by_topic = transcript([t for t in turns if t.get("topic") not in _NOT_IN_CARD])
     labels = {t.id: t.label for t in TOPICS}
     out = ["You are role-playing a real person in a text conversation. Reply exactly as "
            "they would, in their voice. Use only the facts below; if asked about something "
@@ -225,7 +235,9 @@ Rules:
 - Use ONLY facts stated in the interview. Never invent names, places, jobs, events or opinions.
 - Sections, in this order, as short bullet lists: Who you are; Work / study; People in your life \
 (how you talk to each); Your week and where you live; Interests and tastes; Opinions; What matters \
-to you; How you text (combine what they said with the measured habits); Stories you might mention.
+to you; How you text (combine what they said with the measured habits).
+- Keep it a compact profile of who they are (aim for under 300 words). Don't list specific past \
+events or anecdotes.
 - Skip a section if the interview has nothing for it.
 - End with: "If asked about something not covered here, reply the way you plausibly would, \
 without inventing specific facts."
@@ -241,7 +253,7 @@ Measured texting habits:
 def interview_text(turns: Sequence[dict]) -> str:
     labels = {t.id: t.label for t in TOPICS}
     blocks = []
-    for topic_id, items in transcript(turns).items():
+    for topic_id, items in transcript([t for t in turns if t.get("topic") not in _NOT_IN_CARD]).items():
         blocks.append(f"## {labels[topic_id]}")
         for item in items:
             blocks.append(f"Q: {item['question']}\nA: " + "\n   ".join(item["reply"]))

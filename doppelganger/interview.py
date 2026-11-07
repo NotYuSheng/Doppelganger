@@ -99,7 +99,7 @@ def run_session(
     turns = iv.load_turns(path)
     done = set(iv.topics_done(turns))
     remaining = [t for t in iv.TOPICS if t.id not in done]
-    print(f"\n{BOLD}Persona interview{RESET}  {DIM}so the model knows who you are, not just how you type{RESET}")
+    print(f"\n{BOLD}Persona interview{RESET}  {DIM}a short profile of who you are, alongside how you type{RESET}")
     print(f"{DIM}{len(done)} of {len(iv.TOPICS)} topics done · answers saved to {path} · "
           f"persona card: {persona_path}{RESET}")
 
