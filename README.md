@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <b>Supported chats:</b>&nbsp;
+  <img src="https://img.shields.io/badge/Supported%20chats-555555?style=flat" alt="Supported chats:"/>
   <a href="docs/sources/telegram.md"><img src="https://img.shields.io/badge/Telegram-26A5E4?style=flat&logo=telegram&logoColor=white" alt="Telegram"/></a>
   <a href="docs/sources/whatsapp.md"><img src="https://img.shields.io/badge/WhatsApp-25D366?style=flat&logo=whatsapp&logoColor=white" alt="WhatsApp"/></a>
 </p>
