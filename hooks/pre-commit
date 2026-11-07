@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Blocks accidental commits of Telegram data / secrets, even if force-added.
+# Blocks accidental commits of chat-export data (Telegram, WhatsApp) / secrets, even if force-added.
 # Enable once per clone with:  git config core.hooksPath hooks
 # Bypass intentionally with:   git commit --no-verify
 set -euo pipefail
 
 # Patterns that must never be committed (regex, matched against staged paths)
-BLOCK='(^|/)(result\.json|chat_dataset\.jsonl|chat_sharegpt\.json)$|\.session(-journal)?$|(^|/)(DataExport|ChatExport)|(^|/)\.env$|\.(vcard|tgs|webp|ogg|oga)$'
+BLOCK='(^|/)(result\.json|chat_dataset\.jsonl|chat_sharegpt\.json)$|\.session(-journal)?$|(^|/)(DataExport|ChatExport)|(^|/)\.env$|\.(vcard|tgs|webp|ogg|oga|opus|vcf)$|(^|/)WhatsApp Chat|(^|/)_chat\.txt$|-WA[0-9]{4}[^/]*\.[^/]+$'
 
 staged=$(git diff --cached --name-only --diff-filter=AM)
 offenders=$(printf '%s\n' "$staged" | grep -E "$BLOCK" || true)
 
 if [ -n "$offenders" ]; then
-  echo "ERROR: refusing to commit Telegram data / secret files:" >&2
+  echo "ERROR: refusing to commit chat-export data / secret files:" >&2
   printf '%s\n' "$offenders" | sed 's/^/  - /' >&2
   echo "" >&2
   echo "These contain private chat data or auth tokens. If this is truly" >&2

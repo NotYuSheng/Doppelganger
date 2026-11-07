@@ -79,6 +79,10 @@ python -m ingest --source whatsapp \
   and conversations are grouped by **time alone** — the documented fallback in
   [`ingest/message.py`](../../ingest/message.py). (Telegram, by contrast,
   provides reply links that stitch time-split conversations back together.)
+- **Long chats may be truncated.** WhatsApp reportedly caps exports at roughly
+  the most recent 40,000 messages (fewer with media), and the file contains no
+  notice when it's been cut short. If your chat is longer, check that the first
+  timestamp in the export matches when the chat actually started.
 - **One conversation per file.** Each export is a single chat; the file name is
   used as the `chat_id`. To train on several chats, export each and run the
   pipeline per file (or concatenate the outputs).

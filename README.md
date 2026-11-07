@@ -135,7 +135,7 @@ llamafactory-cli train configs/train_lora.yaml
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--source` | `telegram` | Chat source to parse (more planned) |
+| `--source` | `telegram` | Chat source to parse: `telegram` or `whatsapp` |
 | `--input` | `./data/result.json` | Path to the raw export |
 | `--format` | `sharegpt` | `sharegpt` (for training) or `jsonl` (intermediate) |
 | `--self-name` | auto-detected | Override which sender is "you" |
@@ -226,7 +226,7 @@ LLM_API_BASE_URL=http://localhost:8000/v1 LLM_MODEL=Qwen/Qwen2.5-7B-Instruct \
 
 ### Keeping your data out of git
 
-Your chat export and any generated datasets are ignored by `.gitignore` (`result.json`, `*.json`, `*.jsonl`, `DataExport*/`, `*.session`, `.env`, plus Telegram media/contacts such as `*.vcard`, `*.tgs`, `*.webp`, `*.ogg`/`*.oga`). Generic media (`.jpg`, `.mp4`, …) lives inside `DataExport*/`, which is ignored wholesale. As an extra safeguard, a pre-commit hook refuses to commit these files even if they are force-added. Enable it once per clone:
+Your chat export and any generated datasets are ignored by `.gitignore` (`result.json`, `*.json`, `*.jsonl`, `DataExport*/`, `*.session`, `.env`, plus Telegram media/contacts such as `*.vcard`, `*.tgs`, `*.webp`, `*.ogg`/`*.oga`, and WhatsApp exports: `WhatsApp Chat*` `.txt`/`.zip`, `_chat.txt`, and `*-WA0001.*`-style media, `*.opus`, `*.vcf`). Generic media (`.jpg`, `.mp4`, …) lives inside `DataExport*/`, which is ignored wholesale. As an extra safeguard, a pre-commit hook refuses to commit these files even if they are force-added. Enable it once per clone:
 
 ```bash
 git config core.hooksPath hooks
