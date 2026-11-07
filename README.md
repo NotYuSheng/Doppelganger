@@ -343,10 +343,6 @@ python -m unittest discover -s tests -t .
 
 It runs in well under a second and locks in the conversion behaviour, so you can verify a change without running the full pipeline.
 
-## Legacy Workflow
-
-The pre-refactor, Windows-only workflow (which cloned LLaMA-Factory at HEAD) is preserved at the [`v0.1.0`](https://github.com/NotYuSheng/Doppelganger/releases/tag/v0.1.0) tag. The old `scripts/telegram_extract.py` and `scripts/convert_to_sharegpt.py` shims have been removed — use `python -m ingest` instead.
-
 ## Roadmap & Vision
 
 Doppelganger is as much a **learning sandbox** as a tool: the aim is to explore the *full* AI toolbox for capturing how a person communicates, and to find what actually moves the needle on *"does this sound like me?"*. Today that's LoRA fine-tuning — everything below is exploratory (see the issue tracker for the live backlog).
