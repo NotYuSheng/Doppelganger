@@ -10,16 +10,15 @@ import math
 import os
 import subprocess
 import tempfile
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple, Union
 
-from ingest import banner, core, redactor, sharegpt
-from ingest.adapters import available_sources, get_adapter
+from ingest import banner, redactor, sharegpt, sources
 from ingest.cli import _load_dotenv
 from ingest.validator import validate_samples
 
 # ── Canonical artifact paths (one source of truth) ───────────────────────────
 DATA_DIR = "data"
-DEFAULT_INPUT = os.path.join(DATA_DIR, "result.json")
+DEFAULT_INPUT = sources.DEFAULT_INPUT
 RAW_PATH = os.path.join(DATA_DIR, "chat_dataset.jsonl")        # parse output
 DATASET_PATH = os.path.join(DATA_DIR, "chat_sharegpt.json")    # audit output (trains)
 REPORT_PATH = os.path.join(DATA_DIR, "redaction_report.json")
@@ -149,8 +148,8 @@ def train_done() -> bool:
 # ── Steps ─────────────────────────────────────────────────────────────────────
 def parse(
     source: str = "telegram",
-    input_path: str = DEFAULT_INPUT,
-    self_name: Optional[str] = None,
+    input_path: Union[str, Sequence[str], None] = None,
+    self_name: Union[str, Sequence[str], None] = None,
     conversation_gap: int = 3600,
     message_chain: int = 30,
     multi_speaker: bool = False,
@@ -161,31 +160,34 @@ def parse(
 
     No redaction is applied here — that's :func:`audit`. The raw ``.jsonl`` holds
     unredacted text and is gitignored; treat it as sensitive.
+
+    ``input_path`` and ``self_name`` may be lists to combine several exports
+    (see :mod:`ingest.sources` for the ``source:path`` / ``source:name`` forms).
     """
-    if source not in available_sources():
-        print(f"error: source '{source}' not supported. Choose: {', '.join(available_sources())}")
+    try:
+        specs = sources.resolve_specs(input_path, source, self_name)
+    except ValueError as e:
+        print(f"error: {e}")
         return 2
-    if not os.path.exists(input_path):
-        print(f"error: input not found: {input_path}\n"
+    missing = [s.path for s in specs if not os.path.exists(s.path)]
+    if missing:
+        print(f"error: input not found: {', '.join(missing)}\n"
               f"       Place your export there or pass --input.")
         return 1
 
     os.makedirs(DATA_DIR, exist_ok=True)
-    print(f"Loading {input_path} via '{source}' adapter...")
     try:
-        messages = get_adapter(source).parse(input_path, self_name=self_name)
-    except Exception as e:  # malformed export, bad permissions, self-name detection failure
+        samples, results = sources.load_samples(
+            specs,
+            conversation_gap=conversation_gap,
+            message_chain=message_chain,
+            multi_speaker=multi_speaker,
+        )
+    except sources.SourceLoadError as e:  # malformed export, bad permissions, unknown self
         print(f"error: failed to parse export: {e}")
         return 1
-
-    print("Building conversation samples...")
-    samples = core.build_samples(
-        messages,
-        conversation_gap=conversation_gap,
-        message_chain=message_chain,
-        multi_speaker=multi_speaker,
-    )
     print(f"Extracted {len(samples)} conversation samples.")
+    sources.print_summary(results)
 
     if scan:
         report = redactor.scan_samples(samples, locales=locales)
