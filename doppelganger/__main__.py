@@ -97,6 +97,15 @@ def build_parser() -> argparse.ArgumentParser:
     c = sub.add_parser("chat", help="Chat with the fine-tuned model.")
     c.add_argument("--config", default=None, help="Training config (default: configs/train_lora[.local].yaml).")
     c.add_argument("--gpus", default=None, help="CUDA_VISIBLE_DEVICES, e.g. '0'.")
+    c.add_argument("--no-persona", action="store_true",
+                   help="Don't use data/persona.md as the system prompt.")
+
+    iv = sub.add_parser("interview", help="Persona interview: builds data/persona.md + training data.")
+    iv.add_argument("--depth", choices=["short", "standard", "deep"], default=None,
+                    help="short (~10 min), standard (~25 min, follow-ups), deep (~45 min). Default: ask.")
+    iv.add_argument("--allow-cloud", action="store_true",
+                    help="Allow a hosted LLM for follow-up questions (answers are personal; local by default).")
+    iv.add_argument("--card", action="store_true", help="Just rebuild data/persona.md from your answers.")
 
     d = sub.add_parser("drills", help="Answer reply drills to create training data on purpose.")
     d.add_argument("--level", choices=["quick", "standard", "thorough", "complete"], default=None,
@@ -120,7 +129,9 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--base-url", default="http://localhost:8000/v1", help="OpenAI-compatible endpoint.")
     g.add_argument("--model", default="doppelganger", help="Model name to request from the endpoint.")
     g.add_argument("--limit", type=int, default=None, help="Only the first N test conversations.")
-    g.add_argument("--system-prompt", default=None, help="Optional system prompt (e.g. a persona card).")
+    g.add_argument("--system-prompt", default=None, help="Optional system prompt.")
+    g.add_argument("--persona", action="store_true",
+                   help="Use data/persona.md (from `interview`) as the system prompt.")
     evs.add_parser("score", help="chrF + style match for every model's replies.")
     b = evs.add_parser("blind", help="Blind test: pick which reply is really yours.")
     b.add_argument("--label", default="finetuned")
@@ -145,6 +156,13 @@ def _dispatch(args: argparse.Namespace) -> int:
             multi_speaker=args.multi_speaker, locales=_locales(args.redact_locales),
             scan=not args.skip_redact_scan, group_chats=args.group_chats,
         )
+    if args.command == "interview":
+        from doppelganger import interview
+        if args.card:
+            client, model, note = interview.llm_access(args.allow_cloud)
+            print(note)
+            return interview._finish(interview.iv.ELICITED_PATH, interview.iv.PERSONA_PATH, client, model, 0)
+        return interview.run_session(depth=args.depth, allow_cloud=args.allow_cloud)
     if args.command == "drills":
         from doppelganger import drills as drill_session
         if args.report:
@@ -164,7 +182,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "merge":
         return steps.merge(config=args.config, gpus=args.gpus)
     if args.command == "chat":
-        return steps.chat(config=args.config, gpus=args.gpus)
+        return steps.chat(config=args.config, gpus=args.gpus, persona=not args.no_persona)
     if args.command == "auto":
         return steps.auto(
             do_train=args.do_train, redact=args.redact, gpus=args.gpus,
@@ -193,8 +211,10 @@ def _menu() -> int:
     banner.print_banner()
     from doppelganger import drills as drill_session
     from doppelganger import eval_menu
+    from doppelganger import interview as interview_session
     runners = {
         "drills": drill_session.run_session,
+        "interview": interview_session.run_session,
         "eval": eval_menu.run,
         "parse": lambda: _guided(steps.parse), "audit": lambda: steps.audit(country_hint=False),
         "train": steps.train,

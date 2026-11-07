@@ -54,7 +54,7 @@ Give each setup its own `--label` to compare:
 - **With vs without drills:** train on each dataset and generate with
   `--label drills` / `--label no-drills`. Keep the same test set: `--holdout`
   always holds out the same conversations.
-- **A persona prompt:** `eval generate --label persona --system-prompt "$(cat persona.md)"`.
+- **A persona card** (from [`interview`](interview.md)): `eval generate --label persona --persona`.
 
 ## Notes
 

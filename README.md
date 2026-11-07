@@ -87,7 +87,7 @@ A CUDA-capable GPU is needed for training. Ingestion (parsing → dataset) runs 
 
 Download an export from each app you use; see **[Exporting your chats](docs/sources/README.md)** for step-by-step instructions for Telegram, WhatsApp, Instagram, Messenger, LINE, Signal and KakaoTalk, and for combining several apps into one dataset.
 
-No exports, or want better coverage? **[Reply drills](docs/drills.md)** let you create training data on purpose: the app shows realistic messages (advice, disagreements, bad news, …) and you type how you'd reply (`python -m doppelganger drills`).
+No exports, or want better coverage? **[Reply drills](docs/drills.md)** let you create training data on purpose: the app shows realistic messages (advice, disagreements, bad news, …) and you type how you'd reply (`python -m doppelganger drills`). A **[persona interview](docs/interview.md)** (`python -m doppelganger interview`) asks about your life, people, opinions and texting habits, and builds a persona card the model uses as its system prompt, so it knows *who* you are, not just how you type.
 
 The quick start below uses **Telegram**, the default. In **Telegram Desktop**: `Settings > Advanced > Export Telegram Data`, choose **JSON**, then copy the exported `result.json` to `data/result.json` (that's where `setup.sh` looks).
 

@@ -76,3 +76,6 @@ Kakaotalk_Chat_*
 
 # Demo recording intermediates (demo/record_demo.py)
 demo/*.cast
+
+# Persona card from the interview (personal)
+data/persona.md

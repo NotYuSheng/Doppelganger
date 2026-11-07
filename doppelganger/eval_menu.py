@@ -102,7 +102,14 @@ def do_report() -> int:
 def dispatch(args) -> int:
     cmd = getattr(args, "eval_command", None)
     if cmd == "generate":
-        return do_generate(args.label, args.base_url, args.model, args.limit, args.system_prompt)
+        system_prompt = args.system_prompt
+        if getattr(args, "persona", False):
+            from ingest.interview import PERSONA_PATH, load_card
+            system_prompt = load_card(PERSONA_PATH)
+            if not system_prompt:
+                print(f"No persona card at {PERSONA_PATH}. Run: python -m doppelganger interview")
+                return 1
+        return do_generate(args.label, args.base_url, args.model, args.limit, system_prompt)
     if cmd == "score":
         return do_score()
     if cmd == "blind":
