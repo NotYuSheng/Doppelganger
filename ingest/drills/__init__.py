@@ -135,6 +135,86 @@ def next_scenarios(library: Library, answers: Iterable[dict], count: int,
     return chosen
 
 
+# ── Session levels ────────────────────────────────────────────────────────────
+SECONDS_PER_DRILL = 30  # rough time to read a message and type a reply
+
+# (id, label, description). Each level is a coverage goal; what's left of it
+# depends on what's already been answered.
+LEVELS = [
+    ("quick", "Quick", "every situation once"),
+    ("standard", "Standard", "every situation twice, mixed audiences"),
+    ("thorough", "Thorough", "every situation for every audience"),
+    ("complete", "Complete", "every message in the library"),
+]
+
+
+def estimate(count: int) -> str:
+    """Rough time for ``count`` drills, e.g. "~6 min"."""
+    minutes = round(count * SECONDS_PER_DRILL / 60)
+    return "<1 min" if count and minutes < 1 else f"~{minutes} min"
+
+
+def plan_level(library: Library, answers: Iterable[dict], level: str,
+               rng: Optional[random.Random] = None) -> List[Scenario]:
+    """The drills still needed to reach a coverage ``level``.
+
+    * quick: each situation answered at least once
+    * standard: each situation at least twice, preferring audiences not yet used
+    * thorough: each situation × audience answered at least once
+    * complete: every scenario answered
+
+    Returns them interleaved across situations, so stopping early still leaves
+    the coverage balanced.
+    """
+    rng = rng or random.Random()
+    answers = list(answers)
+    answered = {a.get("scenario") for a in answers}
+    sit_count = Counter(a.get("situation") for a in answers)
+    cell_count = Counter((a.get("situation"), a.get("audience")) for a in answers)
+    unanswered = [s for s in library.scenarios if s.id not in answered]
+    rng.shuffle(unanswered)
+
+    picked: List[Scenario] = []
+    if level == "complete":
+        picked = unanswered
+    elif level == "thorough":
+        for sit in library.situations:
+            for aud in library.audiences:
+                if cell_count[(sit, aud)] == 0:
+                    match = next((s for s in unanswered if s.situation == sit and s.audience == aud), None)
+                    if match:
+                        picked.append(match)
+    elif level in ("quick", "standard"):
+        target = 1 if level == "quick" else 2
+        for sit in library.situations:
+            need = target - sit_count[sit]
+            # Prefer audiences this situation hasn't been answered for yet.
+            options = sorted((s for s in unanswered if s.situation == sit),
+                             key=lambda s: cell_count[(sit, s.audience)])
+            used = set()
+            for s in options:
+                if need <= 0:
+                    break
+                if s.audience in used and any(o.audience not in used for o in options):
+                    continue
+                picked.append(s)
+                used.add(s.audience)
+                need -= 1
+    else:
+        raise ValueError(f"unknown level {level!r}; choose from {[l[0] for l in LEVELS]}")
+
+    # Interleave by situation: round-robin in library order.
+    by_sit: Dict[str, List[Scenario]] = {}
+    for s in picked:
+        by_sit.setdefault(s.situation, []).append(s)
+    ordered: List[Scenario] = []
+    while any(by_sit.values()):
+        for sit in library.situations:
+            if by_sit.get(sit):
+                ordered.append(by_sit[sit].pop(0))
+    return ordered
+
+
 def coverage_report(answers: Iterable[dict], library: Library) -> str:
     """A small text table of answers per situation × audience."""
     table = coverage(answers, library)

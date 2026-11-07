@@ -25,10 +25,26 @@ words, and nobody else's data.
 
 ```bash
 python -m doppelganger                    # menu → drills
-python -m doppelganger drills             # asks how many (5 / 10 / 20)
+python -m doppelganger drills             # asks how comprehensive (below)
+python -m doppelganger drills --level quick
 python -m doppelganger drills --count 10 --situation conflict
 python -m doppelganger drills --report    # what you've covered so far
 ```
+
+**How comprehensive?** You choose a coverage level up front and see roughly
+how long it will take (about 30 seconds per reply):
+
+| Level | Goal | From scratch |
+|---|---|---|
+| **Quick** | every situation once | 12 messages, ~6 min |
+| **Standard** | every situation twice, mixed audiences | 24, ~12 min |
+| **Thorough** | every situation for every audience | 48, ~24 min |
+| **Complete** | every message in the library | 96, ~48 min |
+
+Levels build on each other and count what you've already answered. After a
+Quick session, Standard shows "12 to go" and Quick shows "done ✓". Drills are
+served one situation after another, so stopping early still leaves your
+coverage balanced, and each prompt shows roughly how much time is left.
 
 - **Typing:** each line you type is a separate message, like texting. Press
   Enter on an empty line to send.
@@ -49,10 +65,10 @@ well), with 96 messages in all:
 | Disagreement · Good news · Bad news · Asking you to explain | |
 | Asking your opinion · Asking for a recommendation · Catching up · Asking for feedback | |
 
-**Coverage-driven:** each session serves the situations you've answered least,
-spread across audiences. Messages you've already answered aren't repeated until
-you've done them all. `--report` shows a situation × audience table and lists
-what's not covered yet.
+**Coverage-driven:** levels fill the biggest gaps first, and `--count` serves
+the situations you've answered least, spread across audiences. Messages you've
+already answered aren't repeated until you've done them all. `--report` shows a
+situation × audience table and lists what's not covered yet.
 
 ## Using your answers
 
@@ -73,8 +89,9 @@ gitignored and blocked by the pre-commit hook.
 
 - **Reply as you really would** to that person, not as you think you should.
   Short, messy, emoji: whatever is actually you.
-- **A few minutes regularly beats one long session.** Drills are cheap, and
-  coverage matters more than volume.
+- **Start with Quick.** Six minutes gives one answer for every situation, then
+  build up to Standard or Thorough over a few sessions. Coverage matters more
+  than volume.
 - **Drills complement chat history.** Real chats teach the model your everyday
   rhythm; drills teach the situations your chats are missing.
 

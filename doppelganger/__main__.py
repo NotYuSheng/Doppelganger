@@ -85,7 +85,10 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--gpus", default=None, help="CUDA_VISIBLE_DEVICES, e.g. '0'.")
 
     d = sub.add_parser("drills", help="Answer reply drills to create training data on purpose.")
-    d.add_argument("--count", type=int, default=None, help="Drills in this session (default: ask).")
+    d.add_argument("--level", choices=["quick", "standard", "thorough", "complete"], default=None,
+                   help="Coverage goal: quick (each situation once, ~6 min), standard (twice), "
+                        "thorough (every situation × audience), complete (all). Default: ask.")
+    d.add_argument("--count", type=int, default=None, help="Instead of a level: this many drills.")
     d.add_argument("--situation", default=None,
                    help="Only this situation (e.g. advice, apology, conflict, bad_news).")
     d.add_argument("--report", action="store_true", help="Just show what's covered so far.")
@@ -109,7 +112,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         from doppelganger import drills as drill_session
         if args.report:
             return drill_session.report()
-        return drill_session.run_session(count=args.count, situation=args.situation)
+        return drill_session.run_session(count=args.count, situation=args.situation, level=args.level)
     if args.command == "audit":
         return steps.audit(redact=args.redact, locales=_locales(args.redact_locales),
                            validate=not args.skip_validation)

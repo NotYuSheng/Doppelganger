@@ -74,6 +74,45 @@ class SelectionTest(unittest.TestCase):
         self.assertEqual(len(batch), 8)
 
 
+class LevelTest(unittest.TestCase):
+    def setUp(self):
+        self.lib = drills.load_library()
+
+    def _plan(self, level, answers=()):
+        return drills.plan_level(self.lib, list(answers), level, rng=random.Random(0))
+
+    def _as_answers(self, scenarios):
+        return [{"scenario": s.id, "situation": s.situation, "audience": s.audience} for s in scenarios]
+
+    def test_levels_from_scratch(self):
+        sizes = {lvl: len(self._plan(lvl)) for lvl, _, _ in drills.LEVELS}
+        self.assertEqual(sizes, {"quick": 12, "standard": 24, "thorough": 48, "complete": 96})
+        std = self._plan("standard")
+        self.assertEqual(len({(s.situation, s.audience) for s in std}), 24)  # 2 audiences per situation
+        self.assertEqual(len({(s.situation, s.audience) for s in self._plan("thorough")}), 48)
+
+    def test_levels_account_for_existing_answers(self):
+        quick = self._plan("quick")
+        done = self._as_answers(quick)
+        self.assertEqual(self._plan("quick", done), [])
+        self.assertEqual(len(self._plan("standard", done)), 12)
+        self.assertEqual(len(self._plan("thorough", done)), 36)
+        self.assertEqual(len(self._plan("complete", done)), 84)
+
+    def test_interleaved_by_situation(self):
+        first12 = self._plan("standard")[:12]
+        self.assertEqual(len({s.situation for s in first12}), 12)  # stopping early stays balanced
+
+    def test_unknown_level(self):
+        with self.assertRaises(ValueError):
+            self._plan("epic")
+
+    def test_estimate(self):
+        self.assertEqual(drills.estimate(12), "~6 min")
+        self.assertEqual(drills.estimate(1), "<1 min")
+        self.assertEqual(drills.estimate(0), "~0 min")
+
+
 class StorageTest(unittest.TestCase):
     def test_round_trip_and_bad_lines(self):
         lib = drills.load_library()
@@ -124,8 +163,10 @@ class AdapterTest(unittest.TestCase):
 class FakeUI:
     def __init__(self, *answers):
         self.answers = list(answers)
+        self.hints = []
 
     def select(self, title, options, default=0, hints=None):
+        self.hints = list(hints or [])
         return self.answers.pop(0)
 
 
@@ -153,13 +194,36 @@ class SessionTest(unittest.TestCase):
         self.assertEqual([a["reply"] for a in answers], [["hey!", "sounds good"], ["sorry about that"]])
         self.assertIn("Saved 2 answer(s), skipped 1", out)
 
-    def test_asks_session_size(self):
+    def test_asks_level_with_estimates_then_runs_it(self):
         from doppelganger import drills as session
-        feed = iter(["ok", ""] * 10)
+        feed = iter(["ok", ""] * 12)
+        ui = FakeUI(0)  # Quick
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "e.jsonl")
-            _quiet(session.run_session, path=path, ui=FakeUI(0), input_fn=lambda p: next(feed))
-            self.assertEqual(len(drills.load_answers(path)), 5)
+            _, out = _quiet(session.run_session, path=path, ui=ui, input_fn=lambda p: next(feed))
+            answers = drills.load_answers(path)
+            self.assertEqual(len(answers), 12)
+            self.assertEqual(len({a["situation"] for a in answers}), 12)
+            self.assertIn("12 to go, ~6 min", ui.hints[0])
+            self.assertIn("48 to go, ~24 min", ui.hints[2])
+            self.assertIn("full library takes ~48 min", out)
+            self.assertIn("min left", out)
+            # Coming back: Quick is now done, so asking for it again says so.
+            ui2 = FakeUI(0)
+            _, out2 = _quiet(session.run_session, path=path, ui=ui2, input_fn=lambda p: "")
+            self.assertIn("done ✓", ui2.hints[0])
+            self.assertIn("12 to go, ~6 min", ui2.hints[1])  # standard: 12 more
+            self.assertIn("Nothing left for this level", out2)
+
+    def test_level_argument_and_bad_level(self):
+        from doppelganger import drills as session
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "e.jsonl")
+            rc, out = _quiet(session.run_session, path=path, level="thorough", input_fn=lambda p: "/stop")
+            self.assertEqual(rc, 0)
+            self.assertIn("48 drill(s), about ~24 min", out)
+            rc, _ = _quiet(session.run_session, path=path, level="nope", input_fn=lambda p: "")
+            self.assertEqual(rc, 2)
 
     def test_end_of_input_saves_what_was_answered(self):
         _, _, answers = self._run(["yes", "", EOFError()], count=5)
