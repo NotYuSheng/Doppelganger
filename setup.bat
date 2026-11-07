@@ -6,6 +6,8 @@ rem (python -m doppelganger) to turn your chat exports into a training-ready
 rem dataset.
 
 set "BASE_DIR=%~dp0"
+rem Python writes UTF-8 even when output is redirected (the banner/menu use Unicode).
+set "PYTHONUTF8=1"
 cd /d "%BASE_DIR%"
 
 echo [1/4] Creating virtual environment (venv)...

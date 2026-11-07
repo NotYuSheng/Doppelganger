@@ -66,6 +66,8 @@ def write_banner_module():
         'def print_banner() -> None:\n'
         '    if os.environ.get("DOPPELGANGER_NO_BANNER"):\n'
         '        return\n'
+        '    from ingest.console import use_utf8_output\n'
+        '    use_utf8_output()  # the braille art can\'t be written in Windows\' legacy code page\n'
         '    lines = _BANNER.split("\\n")\n'
         '    marked = [i for i, line in enumerate(lines) if "<C>" in line]\n'
         '    for k, i in enumerate(marked):\n'

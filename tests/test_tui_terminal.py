@@ -106,6 +106,16 @@ class PtyTest(unittest.TestCase):
         out, _ = self._drive(code, [UP, ENTER], "Tick")
         self.assertIn("RESULT='action'", out)
 
+    def test_signal_keys_cancel_instead_of_killing(self):
+        # Ctrl-C / Ctrl-\ / Ctrl-Z reach the picker as keys and cancel it; the
+        # process exits normally (so the terminal and cursor are restored).
+        code = ("from doppelganger import tui\n"
+                "print('RESULT=%r' % tui.select('Pick', ['a', 'b']))\n")
+        for key in ("\x03", "\x1c", "\x1a"):
+            out, status = self._drive(code, [key], "Pick")
+            self.assertIn("RESULT=None", out)
+            self.assertTrue(os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0)
+
     def test_full_menu_starts_and_quits(self):
         code = ("import sys\nfrom doppelganger.__main__ import main\n"
                 "rc = main([])\nprint('RESULT=%r' % rc)\n")
