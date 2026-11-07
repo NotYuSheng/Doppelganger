@@ -34,3 +34,12 @@ __pycache__/
 *.webp
 *.ogg
 *.oga
+
+# WhatsApp chat exports / media — never commit
+# Android: "WhatsApp Chat with Alice.txt"; iPhone: "WhatsApp Chat - Alice.zip" containing _chat.txt
+WhatsApp Chat*
+_chat.txt
+# Exported media: IMG-20200126-WA0001.jpg, PTT-20200126-WA0002.opus, ...
+*-WA[0-9][0-9][0-9][0-9]*.*
+*.opus
+*.vcf
