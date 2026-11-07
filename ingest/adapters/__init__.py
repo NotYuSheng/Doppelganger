@@ -18,3 +18,4 @@ from ingest.adapters import telegram  # noqa: F401,E402
 from ingest.adapters import whatsapp  # noqa: F401,E402
 from ingest.adapters import instagram  # noqa: F401,E402
 from ingest.adapters import messenger  # noqa: F401,E402
+from ingest.adapters import line  # noqa: F401,E402
