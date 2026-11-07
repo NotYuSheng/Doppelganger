@@ -87,7 +87,7 @@ A CUDA-capable GPU is needed for training. Ingestion (parsing → dataset) runs 
 
 Download an export from each app you use; see **[Exporting your chats](docs/sources/README.md)** for step-by-step instructions for Telegram, WhatsApp, Instagram, Messenger, LINE, Signal and KakaoTalk, and for combining several apps into one dataset.
 
-No exports, or want better coverage? **[Reply drills](docs/drills.md)** let you create training data on purpose: the app shows realistic messages (advice, disagreements, bad news, …) and you type how you'd reply (`python -m doppelganger drills`).
+No exports, or want better coverage? **[Reply drills](docs/drills.md)** let you create training data on purpose: the app shows realistic messages (advice, disagreements, bad news, …) and you type how you'd reply (`python -m doppelganger drills`). A **[persona interview](docs/interview.md)** (`python -m doppelganger interview`) asks about your life, people, opinions and texting habits, and builds a persona card: a short profile of who you are that the model uses as its system prompt, alongside the style fine-tuning learns.
 
 The quick start below uses **Telegram**, the default. In **Telegram Desktop**: `Settings > Advanced > Export Telegram Data`, choose **JSON**, then copy the exported `result.json` to `data/result.json` (that's where `setup.sh` looks).
 
@@ -363,7 +363,7 @@ Doppelganger is as much a **learning sandbox** as a tool: the aim is to explore 
 
 **Shaping the model** — pre-training · fine-tuning · alignment/DPO · continual learning · synthetic data / self-instruct · multi-LoRA personas & merging · distillation to on-device · PEFT comparison
 
-**Giving it context & memory** — RAG · long-term memory + reflection · relationship/knowledge graph · style embeddings / user-conditioning · persona-prompt quiz · MCP
+**Giving it context & memory** — RAG · long-term memory + reflection · relationship/knowledge graph · style embeddings / user-conditioning · persona card from an interview (#14) · MCP
 
 **Multimodal** — voice cloning, TTS/STT · stickers / emoji / memes
 

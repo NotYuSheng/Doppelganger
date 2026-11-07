@@ -19,6 +19,7 @@ Environment variables:
 """
 
 import os
+from typing import Optional
 
 VALIDATE_ENV = "LLM_VALIDATE"
 MODEL_ENV = "LLM_MODEL"
@@ -91,11 +92,14 @@ def endpoint_label() -> str:
     return base_url() or "OpenAI API"
 
 
-def chat(client, model_name: str, prompt: str, max_tokens: int = 256) -> str:
+def chat(client, model_name: str, prompt: str, max_tokens: int = 256,
+         temperature: Optional[float] = None) -> str:
     """Single-prompt completion; returns the assistant message text."""
+    kwargs = {"temperature": temperature} if temperature is not None else {}
     resp = client.chat.completions.create(
         model=model_name,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
+        **kwargs,
     )
     return (resp.choices[0].message.content or "").strip()

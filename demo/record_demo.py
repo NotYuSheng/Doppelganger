@@ -26,7 +26,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CAST = os.path.join(ROOT, "demo", "demo_cli.cast")
 # Tall enough for the banner + menu on the first screen; later output scrolls.
-COLS, ROWS = 100, 32
+COLS, ROWS = 100, 33
 
 UP, DOWN, ENTER, SPACE = "\x1b[A", "\x1b[B", "\r", " "
 

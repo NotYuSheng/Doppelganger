@@ -369,7 +369,8 @@ def _llamafactory(args: List[str], gpus: Optional[str] = None) -> int:
     env = dict(os.environ)
     if gpus:
         env["CUDA_VISIBLE_DEVICES"] = gpus
-    print(f"$ llamafactory-cli {' '.join(args)}"
+    shown = [a if len(a) <= 80 else a[:60].replace("\n", " ") + "…" for a in args]
+    print(f"$ llamafactory-cli {' '.join(shown)}"
           + (f"   (CUDA_VISIBLE_DEVICES={gpus})" if gpus else ""))
     try:
         return subprocess.run(["llamafactory-cli", *args], env=env).returncode
@@ -451,7 +452,7 @@ def merge(config: Optional[str] = None, gpus: Optional[str] = None) -> int:
     return _llamafactory(["export", cfg_path], gpus=gpus)
 
 
-def chat(config: Optional[str] = None, gpus: Optional[str] = None) -> int:
+def chat(config: Optional[str] = None, gpus: Optional[str] = None, persona: bool = True) -> int:
     """Stage 5: chat with the fine-tuned model (base + adapter, nothing merged).
 
     Uses the same training ``config`` as :func:`train` so a custom ``--config``
@@ -470,14 +471,22 @@ def chat(config: Optional[str] = None, gpus: Optional[str] = None) -> int:
     if not out or not os.path.exists(os.path.join(out, "adapter_model.safetensors")):
         print(f"warning: no trained adapter at {out!r} — run `train` first.")
         return 1
-    return _llamafactory([
+    args = [
         "chat",
         "--model_name_or_path", cfg.get("model_name_or_path", ""),
         "--adapter_name_or_path", out,
         "--template", cfg.get("template", "default"),
         "--finetuning_type", "lora",
         "--infer_dtype", "bfloat16",
-    ], gpus=gpus)
+    ]
+    from ingest.interview import PERSONA_PATH, load_card
+    card = load_card(PERSONA_PATH) if persona else None
+    if card:
+        # One "--opt=value" token: a card starting with "-" (e.g. a bullet) would
+        # otherwise be read as an option by LLaMA-Factory's argument parser.
+        args.append(f"--default_system={card}")
+        print(f"Using your persona card ({PERSONA_PATH}) as the system prompt.")
+    return _llamafactory(args, gpus=gpus)
 
 
 def serve(config: Optional[str] = None, gpus: Optional[str] = None,
@@ -539,6 +548,11 @@ def auto(
     return rc
 
 
+def interview_done() -> bool:
+    from ingest.interview import PERSONA_PATH
+    return os.path.exists(PERSONA_PATH)
+
+
 def drills_done() -> bool:
     from ingest import drills
     return bool(drills.load_answers(drills.DEFAULT_PATH))
@@ -547,6 +561,7 @@ def drills_done() -> bool:
 # Ordered for the menu.
 STEPS = [
     ("drills", "Answer reply drills: create training data on purpose (optional)", drills_done),
+    ("interview", "Persona interview: tell it who you are (optional)", interview_done),
     ("parse", "Parse export → conversations + sensitive-data scan", parse_done),
     ("audit", "Review scan → redact → training-ready dataset", audit_done),
     ("train", "LoRA fine-tune on the dataset", train_done),

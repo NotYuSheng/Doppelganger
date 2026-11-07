@@ -41,6 +41,9 @@ Chat history covers whatever conversations happened to take place. [Reply
 drills](../drills.md) fill the gaps: the app shows realistic incoming messages
 (advice, disagreements, apologies, bad news, …) and you type how you'd reply.
 Answers are saved to `data/elicited.jsonl` and picked up like any other export.
+The [persona interview](../interview.md) adds a short profile of who you are
+(work, people, interests, opinions) as a persona card for the system prompt,
+plus more training data.
 
 ## Combining apps
 

@@ -96,5 +96,5 @@ gitignored and blocked by the pre-commit hook.
   rhythm; drills teach the situations your chats are missing.
 
 This is phase 1 of [#14](https://github.com/NotYuSheng/Doppelganger/issues/14).
-Next come a persona interview, pick-or-fix once a model is trained, and a
-style card.
+Phase 2 is the [persona interview](interview.md); still to come are pick-or-fix
+(once a model is trained) and a style card.
