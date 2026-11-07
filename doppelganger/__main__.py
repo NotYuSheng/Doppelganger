@@ -32,6 +32,9 @@ def _add_parse_flags(p: argparse.ArgumentParser, with_redact: bool = False) -> N
                    help="Max seconds between same-sender messages to merge into one turn.")
     p.add_argument("--multi-speaker", action="store_true",
                    help="Keep and label individual senders in group chats.")
+    p.add_argument("--group-chats", choices=["keep", "focus", "skip"], default="keep",
+                   help="Group chats: keep (default), focus (only direct exchanges "
+                        "with one person), or skip.")
     p.add_argument("--redact-locales", default=None,
                    help="Comma-separated locales for sensitive-data detection (e.g. SG,US).")
     if with_redact:
@@ -91,7 +94,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             source=args.source, input_path=args.input_path, self_name=args.self_name,
             conversation_gap=args.conversation_gap, message_chain=args.message_chain,
             multi_speaker=args.multi_speaker, locales=_locales(args.redact_locales),
-            scan=not args.skip_redact_scan,
+            scan=not args.skip_redact_scan, group_chats=args.group_chats,
         )
     if args.command == "audit":
         return steps.audit(redact=args.redact, locales=_locales(args.redact_locales),
@@ -108,6 +111,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             source=args.source, input_path=args.input_path, self_name=args.self_name,
             conversation_gap=args.conversation_gap, message_chain=args.message_chain,
             multi_speaker=args.multi_speaker, locales=_locales(args.redact_locales),
+            group_chats=args.group_chats,
         )
     return 2
 

@@ -81,9 +81,27 @@ Each message becomes a turn with role `user` (other people) or `assistant`
 one "turn"). Conversations with only one side are dropped — you need both a
 `user` and an `assistant` turn to train on.
 
-Group chats: by default the other side is collapsed into a single `user`
-speaker. With **`--multi-speaker`**, each non-self sender keeps their identity
-and their turns are labelled (`Bob: ...`); your own turns are never labelled.
+### Group chats
+
+A chat is a group chat when it has three or more other people in it, or two
+whose messages overlap in time. (A 1:1 chat where the other person changed their
+display name partway through has two names but never overlapping ones, so it
+stays a 1:1.) By default the other side is
+collapsed into a single `user` speaker. With **`--multi-speaker`**, each non-self
+sender keeps their identity and their turns are labelled (`Bob: ...`); your own
+turns are never labelled.
+
+Group chats make weaker training data than 1:1 chats. In a busy group most of
+your messages aren't replies to the message just before them, so pairing turns
+by time order produces non-sequiturs. **`--group-chats`** controls this:
+
+| Mode | What happens to a group chat |
+|------|------------------------------|
+| `keep` (default) | Used like a 1:1 chat. Ingest prints how many samples came from group chats. |
+| `focus` | Only the parts that read like a 1:1 are kept. For sources with reply links (Telegram, Signal), each **explicit reply** of yours is paired with the message it answers, even if others spoke in between; these are taken first. The rest yields **direct exchanges**: stretches where only you and *one* other person are talking (anyone else speaking ends the stretch). |
+| `skip` | Left out entirely. |
+
+Two-person chats are never affected.
 
 **Output:** `Sample = List[{"role": "user"|"assistant", "text": str}]`.
 
@@ -167,11 +185,12 @@ coercion.
 | Flag | Default | Stage | Purpose |
 |------|---------|-------|---------|
 | `--source` | `telegram` | 1 | Which adapter parses the export |
-| `--input` | `./data/result.json` | 1 | Path to the raw export |
+| `--input` | `./data/result.json` | 1 | Path to a raw export; repeat (`source:path`) to combine exports |
 | `--self-name` | auto | 1 | Override "which sender is you" |
 | `--conversation-gap` | `3600` | 2a | Silence (s) that starts a new conversation |
 | `--message-chain` | `30` | 2c | Max gap (s) to merge same-sender messages into one turn |
 | `--multi-speaker` | off | 2c | Keep + label individual senders in group chats |
+| `--group-chats` | `keep` | 2c | `keep` / `focus` / `skip` for chats with 3+ people |
 | `--redact` | `off` | 4 | `off` / `replace` / `drop` |
 | `--redact-locales` | `SG` | 3 | Country ID packs for the scan |
 | `--llm-redact` | off | 3 | LLM-assisted PII detection (local-first) |

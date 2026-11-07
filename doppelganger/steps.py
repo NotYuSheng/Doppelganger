@@ -155,6 +155,7 @@ def parse(
     multi_speaker: bool = False,
     locales: Optional[List[str]] = None,
     scan: bool = True,
+    group_chats: str = "keep",
 ) -> int:
     """Stage 1: export → conversations → (scan). Writes raw samples + report.
 
@@ -182,12 +183,14 @@ def parse(
             conversation_gap=conversation_gap,
             message_chain=message_chain,
             multi_speaker=multi_speaker,
+            group_chats=group_chats,
         )
     except sources.SourceLoadError as e:  # malformed export, bad permissions, unknown self
         print(f"error: failed to parse export: {e}")
         return 1
     print(f"Extracted {len(samples)} conversation samples.")
     sources.print_summary(results)
+    sources.print_group_advice(results, group_chats, multi_speaker)
 
     if scan:
         report = redactor.scan_samples(samples, locales=locales)

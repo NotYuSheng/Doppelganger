@@ -83,9 +83,12 @@ in libsignal), written one frame per line with the Protobuf JSON mapping:
 
 ## 1:1 vs. group chats
 
-As with every source, **1:1 chats give the best results**. Group chats work,
-and `--multi-speaker` keeps each other sender labelled. See
-[#46](https://github.com/NotYuSheng/Doppelganger/issues/46).
+As with every source, **1:1 chats give the best results**. In a group chat
+most of your messages aren't replies to the message just before them, so the
+samples are noisier. `--group-chats focus` keeps only the stretches where you and
+one other person talk directly, plus each of your explicit replies with the message it answers, and `--group-chats skip` leaves group chats
+out. `--multi-speaker` keeps each other sender labelled (`Bob: ...`). See
+[group chats](../data-pipeline.md#group-chats).
 
 ## Output
 

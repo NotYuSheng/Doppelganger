@@ -10,12 +10,16 @@ identical for every source. Two tunables:
 A *sample* is a list of ``{"role": "user"|"assistant", "text": ...}`` turns.
 """
 
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
 
 from ingest.message import NormalizedMessage
 
 DEFAULT_CONVERSATION_GAP = 3600  # 1 hour of silence starts a new conversation
 DEFAULT_MESSAGE_CHAIN = 30       # consecutive same-sender messages within 30s chain into one turn
+
+# How group chats (more than two people) are turned into samples.
+GROUP_CHAT_MODES = ("keep", "focus", "skip")
+DEFAULT_GROUP_CHATS = "keep"
 
 Turn = Dict[str, str]
 Sample = List[Turn]
@@ -111,6 +115,100 @@ def _merge_by_reply(
     return [sorted(groups[r], key=lambda m: m.timestamp) for r in ordered_roots]
 
 
+def _is_group_chat(chat_messages: List[NormalizedMessage]) -> bool:
+    """Whether a chat really has more than one other person in it.
+
+    Counting distinct sender names isn't enough: in a 1:1 chat the other
+    person may change their display name ("Bob", later "Bob Tan"), which would
+    look like two people. So a chat counts as a group when it has three or more
+    other senders, or exactly two whose activity *overlaps* in time (one speaks,
+    then the other, then the first again), which a rename never does.
+    """
+    spans: Dict[str, List[int]] = {}
+    for m in chat_messages:
+        if m.sender_is_self:
+            continue
+        span = spans.setdefault(m.sender_id, [m.timestamp, m.timestamp])
+        span[0] = min(span[0], m.timestamp)
+        span[1] = max(span[1], m.timestamp)
+    if len(spans) < 2:
+        return False
+    if len(spans) >= 3:
+        return True
+    ordered = sorted(spans.values())
+    latest_end = ordered[0][1]
+    for start, end in ordered[1:]:
+        if start <= latest_end:
+            return True
+        latest_end = max(latest_end, end)
+    return False
+
+
+def _direct_exchanges(
+    conversation: List[NormalizedMessage],
+    by_id: Dict[str, NormalizedMessage],
+) -> List[List[NormalizedMessage]]:
+    """Pick out the parts of a group conversation that read like a 1:1.
+
+    In a busy group most of your messages aren't replies to whatever came just
+    before them, so pairing by time order alone produces non-sequiturs. This
+    keeps:
+
+    * **Explicit replies** (sources with reply links, e.g. Telegram or Signal):
+      a message of yours that replies to someone is paired with the message it
+      replies to, along with what you sent straight after it, even if others
+      spoke in between. These are taken first, since the reply link says who
+      you were answering.
+    * **Direct exchanges:** among the remaining messages, stretches where only
+      you and *one* other person are talking. Another person speaking, or one of
+      your explicit replies, ends the stretch. Stretches without both you and
+      the other person are dropped.
+
+    ``by_id`` maps message ids to messages across the whole chat (a reply can
+    point into an earlier conversation).
+    """
+    exchanges: List[List[NormalizedMessage]] = []
+    claimed = set()  # ids of messages used in an explicit-reply pair
+    for i, msg in enumerate(conversation):
+        if id(msg) in claimed or not (msg.sender_is_self and msg.reply_to_id):
+            continue
+        target = by_id.get(msg.reply_to_id)
+        if target is None or target.sender_is_self:
+            continue
+        # Your reply plus any messages you sent straight after it (the turn),
+        # stopping at your next explicit reply, which gets its own pair.
+        turn = [msg]
+        for nxt in conversation[i + 1:]:
+            if not nxt.sender_is_self or nxt.reply_to_id:
+                break
+            turn.append(nxt)
+        claimed.update(id(m) for m in turn)
+        exchanges.append([target] + turn)
+
+    current: List[NormalizedMessage] = []
+    other: Optional[str] = None
+
+    def close() -> None:
+        if any(m.sender_is_self for m in current) and any(not m.sender_is_self for m in current):
+            exchanges.append(list(current))
+
+    for msg in conversation:
+        if id(msg) in claimed:
+            close()
+            current, other = [], None
+            continue
+        if not msg.sender_is_self:
+            if other is not None and msg.sender_id != other:
+                close()
+                current = []
+            other = msg.sender_id
+        current.append(msg)
+    close()
+
+    # Chronological order by each sample's first message.
+    return sorted(exchanges, key=lambda ex: ex[0].timestamp)
+
+
 def _collect_turn(
     conversation: List[NormalizedMessage], start_idx: int, chain_threshold: int
 ):
@@ -172,11 +270,31 @@ def _assemble_turns(raw_turns, multi_speaker: bool) -> Sample:
     return turns
 
 
+def _to_sample(
+    conversation: List[NormalizedMessage], message_chain: int, multi_speaker: bool
+) -> Optional[Sample]:
+    """Merge one conversation into turns; None unless it has both roles."""
+    raw_turns = []
+    i = 0
+    while i < len(conversation):
+        texts, next_i = _collect_turn(conversation, i, message_chain)
+        if texts:
+            m = conversation[i]
+            raw_turns.append((m.sender_id, m.sender_is_self, "\n".join(texts)))
+        i = next_i
+
+    turns = _assemble_turns(raw_turns, multi_speaker)
+    roles = {t["role"] for t in turns}
+    return turns if "user" in roles and "assistant" in roles else None
+
+
 def build_samples(
     messages: Iterable[NormalizedMessage],
     conversation_gap: int = DEFAULT_CONVERSATION_GAP,
     message_chain: int = DEFAULT_MESSAGE_CHAIN,
     multi_speaker: bool = False,
+    group_chats: str = DEFAULT_GROUP_CHATS,
+    stats: Optional[Dict[str, int]] = None,
 ) -> List[Sample]:
     """Turn normalized messages into multi-turn conversation samples.
 
@@ -186,24 +304,42 @@ def build_samples(
 
     ``multi_speaker`` preserves and labels individual senders in group chats
     (see :func:`_assemble_turns`); the default collapses the other side.
+
+    ``group_chats`` controls chats with more than two people: ``"keep"`` treats
+    them like 1:1 chats, ``"focus"`` keeps only the parts that read like a 1:1
+    (see :func:`_direct_exchanges`), ``"skip"`` leaves them out. If ``stats`` is
+    given, it is filled with ``chats``, ``group_chats``, ``samples`` and
+    ``group_samples`` counts.
     """
+    if group_chats not in GROUP_CHAT_MODES:
+        raise ValueError(f"group_chats must be one of {GROUP_CHAT_MODES}, got {group_chats!r}")
     samples: List[Sample] = []
+    counts = {"chats": 0, "group_chats": 0, "samples": 0, "group_samples": 0}
 
     for chat_messages in _group_by_chat(messages):
+        is_group = _is_group_chat(chat_messages)
+        counts["chats"] += 1
+        counts["group_chats"] += is_group
+        if is_group and group_chats == "skip":
+            continue
         time_convs = _split_into_conversations(chat_messages, conversation_gap)
+        by_id = (
+            {m.message_id: m for m in chat_messages if m.message_id is not None}
+            if is_group and group_chats == "focus" else {}
+        )
         for conversation in _merge_by_reply(time_convs):
-            raw_turns = []
-            i = 0
-            while i < len(conversation):
-                texts, next_i = _collect_turn(conversation, i, message_chain)
-                if texts:
-                    m = conversation[i]
-                    raw_turns.append((m.sender_id, m.sender_is_self, "\n".join(texts)))
-                i = next_i
+            parts = (
+                _direct_exchanges(conversation, by_id)
+                if is_group and group_chats == "focus"
+                else [conversation]
+            )
+            for part in parts:
+                sample = _to_sample(part, message_chain, multi_speaker)
+                if sample is not None:
+                    samples.append(sample)
+                    counts["group_samples"] += is_group
 
-            turns = _assemble_turns(raw_turns, multi_speaker)
-            roles = {t["role"] for t in turns}
-            if "user" in roles and "assistant" in roles:
-                samples.append(turns)
-
+    counts["samples"] = len(samples)
+    if stats is not None:
+        stats.update(counts)
     return samples
