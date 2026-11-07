@@ -57,3 +57,6 @@ facebook-*/
 facebook-*.zip
 your_facebook_activity/
 your_activity_across_facebook/
+
+# LINE chat exports — never commit ("[LINE] Chat with Alice.txt", "[LINE] Aliceとのトーク.txt")
+\[LINE\]*
