@@ -156,16 +156,28 @@ llamafactory-cli train configs/train_lora.yaml
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--source` | `telegram` | Chat source to parse: `telegram`, `whatsapp`, `instagram`, `messenger`, `line`, `signal` or `kakaotalk` |
-| `--input` | `./data/result.json` | Path to the raw export |
+| `--source` | `telegram` | Chat source to parse: `telegram`, `whatsapp`, `instagram`, `messenger`, `line`, `signal` or `kakaotalk` (used for inputs without a `source:` prefix) |
+| `--input` | `./data/result.json` | Path to the raw export. Repeat it to combine several exports; prefix with the source to mix apps (`--input telegram:result.json`) |
 | `--format` | `sharegpt` | `sharegpt` (for training) or `jsonl` (intermediate) |
-| `--self-name` | auto-detected | Override which sender is "you" |
+| `--self-name` | auto-detected | Override which sender is "you". Use `source:Name` to set it per source (repeatable) |
 | `--conversation-gap` | `3600` | Seconds of silence that start a new conversation |
 | `--message-chain` | `30` | Max seconds between same-sender messages to merge into one turn |
 | `--multi-speaker` | off | In group chats, keep and label each sender on the human side (your turns are never labelled) |
 | `--no-audit` | off | Master off-switch: skip **all** auditing (regex scan + LLM validation) and just build the dataset |
 | `--skip-redact-scan` | off | Skip only the regex sensitive-data scan |
 | `--skip-validation` | off | Skip only the LLM quality validation |
+
+**Combining several apps.** Most people's chats are spread across apps. Pass one `--input` per export, prefixed with its source, and you get one combined dataset. Your name usually differs between apps, so give `--self-name` per source where the app can't detect it:
+
+```bash
+python -m ingest \
+  --input telegram:data/result.json \
+  --input "whatsapp:data/WhatsApp Chat with Alice.txt" \
+  --input signal:data/signal-export-2026-11-07/ \
+  --self-name "whatsapp:Your Name"
+```
+
+Each export is parsed separately (chats from different exports are never merged), then everything after is shared: one sensitive-data scan, one report, one dataset. A per-source summary shows what each export contributed. `python -m doppelganger parse`/`auto` take the same flags.
 
 ### Optional: LLM quality auditing
 

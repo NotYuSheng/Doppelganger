@@ -17,10 +17,15 @@ from doppelganger import steps
 
 def _add_parse_flags(p: argparse.ArgumentParser, with_redact: bool = False) -> None:
     p.add_argument("--source", default="telegram",
-                   help=f"Chat source. Supported: {', '.join(available_sources())}.")
-    p.add_argument("--input", dest="input_path", default=steps.DEFAULT_INPUT,
-                   help="Path to the raw export.")
-    p.add_argument("--self-name", default=None, help="Override auto-detection of which sender is you.")
+                   help=f"Chat source for inputs without a 'source:' prefix. "
+                        f"Supported: {', '.join(available_sources())}.")
+    p.add_argument("--input", dest="input_path", action="append", default=None,
+                   help=f"Path to a raw export (default: {steps.DEFAULT_INPUT}). Repeat to "
+                        "combine exports; prefix with the source to mix apps "
+                        "(--input telegram:result.json --input 'whatsapp:Chat.txt').")
+    p.add_argument("--self-name", action="append", default=None,
+                   help="Your display name if a source can't detect it. 'source:Name' "
+                        "sets it for one source (repeatable).")
     p.add_argument("--conversation-gap", type=int, default=3600,
                    help="Seconds of silence that start a new conversation.")
     p.add_argument("--message-chain", type=int, default=30,

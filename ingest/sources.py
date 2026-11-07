@@ -1,0 +1,155 @@
+"""Load one or more chat exports into a single set of conversation samples.
+
+Most people's texting is spread over several apps, so ingest can take several
+exports in one run and write one combined dataset::
+
+    python -m ingest --input telegram:data/result.json \\
+                     --input whatsapp:"data/WhatsApp Chat with Alice.txt" \\
+                     --input signal:data/signal-export-2026-11-07/ \\
+                     --self-name "whatsapp:Yu Sheng"
+
+An ``--input`` written as ``<source>:<path>`` names its own source. A plain path
+uses ``--source`` (the single-export form, unchanged). ``--self-name`` works the
+same way: ``<source>:<name>`` applies to that source only, and a plain name
+applies to every source that doesn't have its own. Your name usually differs
+between apps, so per-source names are the normal case.
+
+Each export is parsed and turned into samples on its own. Conversations never
+span chats, and chats never span exports, so this gives the same samples as one
+big pass. It also makes it easy to report what each export contributed. When
+more than one export is given, chat ids are prefixed with the export's position
+and source (``2:whatsapp:WhatsApp Chat with Alice``), so two chats from
+different exports can never be merged into one conversation, even if their ids
+happen to match.
+"""
+
+import os
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Sequence, Tuple
+
+from ingest import core
+from ingest.adapters import available_sources, get_adapter
+
+
+@dataclass
+class SourceSpec:
+    """One export to load: which adapter, which path, and who "you" are in it."""
+
+    source: str
+    path: str
+    self_name: Optional[str] = None
+
+
+@dataclass
+class SourceResult:
+    spec: SourceSpec
+    messages: int
+    samples: int
+
+
+def _split_prefix(value: str) -> Tuple[Optional[str], str]:
+    """Split ``"<source>:<rest>"`` when ``<source>`` is a known adapter.
+
+    Anything else (a plain path, a Windows path like ``C:\\...``, a name that
+    happens to contain a colon) is returned unchanged with no source.
+    """
+    head, sep, rest = value.partition(":")
+    if sep and head.strip().lower() in available_sources():
+        return head.strip().lower(), rest
+    return None, value
+
+
+def resolve_specs(
+    inputs: Sequence[str],
+    default_source: str,
+    self_names: Sequence[str] = (),
+) -> List[SourceSpec]:
+    """Turn ``--input`` / ``--self-name`` values into :class:`SourceSpec` s.
+
+    Raises ValueError for an unknown ``--source``, or for a source-specific
+    ``--self-name`` whose source isn't among the inputs (almost always a typo).
+    """
+    if default_source not in available_sources():
+        raise ValueError(
+            f"Source {default_source!r} is not supported. Supported sources: "
+            f"{', '.join(available_sources())}."
+        )
+
+    shared_name: Optional[str] = None
+    per_source: Dict[str, str] = {}
+    for value in self_names:
+        source, name = _split_prefix(value)
+        if source:
+            per_source[source] = name
+        else:
+            shared_name = value
+
+    specs: List[SourceSpec] = []
+    seen = set()
+    for value in inputs:
+        source, path = _split_prefix(value)
+        source = source or default_source
+        key = (source, os.path.abspath(path))
+        if key in seen:
+            print(f"[sources] Skipping duplicate input {value!r}.")
+            continue
+        seen.add(key)
+        specs.append(SourceSpec(source, path, per_source.get(source, shared_name)))
+
+    unused = sorted(set(per_source) - {s.source for s in specs})
+    if unused:
+        raise ValueError(
+            f"--self-name given for {', '.join(unused)}, but no --input uses "
+            f"{'that source' if len(unused) == 1 else 'those sources'}."
+        )
+    return specs
+
+
+def load_samples(
+    specs: Sequence[SourceSpec],
+    conversation_gap: int = core.DEFAULT_CONVERSATION_GAP,
+    message_chain: int = core.DEFAULT_MESSAGE_CHAIN,
+    multi_speaker: bool = False,
+) -> Tuple[List[core.Sample], List[SourceResult]]:
+    """Parse each export, build its samples, and combine them.
+
+    Returns ``(samples, per-source results)``. Errors from an adapter (missing
+    file, unrecognised format, can't tell who "you" are) propagate, with the
+    failing source and path added to the message.
+    """
+    namespaced = len(specs) > 1
+    samples: List[core.Sample] = []
+    results: List[SourceResult] = []
+    for i, spec in enumerate(specs, 1):
+        label = f"'{spec.source}'" + (f" ({i}/{len(specs)})" if namespaced else "")
+        print(f"Loading {spec.path} via {label} adapter...")
+        try:
+            messages = get_adapter(spec.source).parse(spec.path, self_name=spec.self_name)
+        except Exception as e:
+            raise type(e)(f"[{spec.source}: {spec.path}] {e}") from e
+        if namespaced:
+            for m in messages:
+                m.chat_id = f"{i}:{spec.source}:{m.chat_id}"
+        built = core.build_samples(
+            messages,
+            conversation_gap=conversation_gap,
+            message_chain=message_chain,
+            multi_speaker=multi_speaker,
+        )
+        samples.extend(built)
+        results.append(SourceResult(spec, len(messages), len(built)))
+    return samples, results
+
+
+def print_summary(results: Sequence[SourceResult]) -> None:
+    """Show what each export contributed (only worth printing for 2+)."""
+    if len(results) < 2:
+        return
+    width = max(len(r.spec.source) for r in results)
+    print("Per-source summary:")
+    for r in results:
+        print(f"  {r.spec.source:<{width}}  {r.messages:>7} messages  "
+              f"{r.samples:>6} samples  {r.spec.path}")
+    if any(r.samples == 0 for r in results):
+        print("  Warning: an export contributed no samples. Check its --self-name "
+              "(your messages must be recognised) and that the file is the right export.")

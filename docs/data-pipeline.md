@@ -10,7 +10,12 @@ has its own page under [`docs/sources/`](sources/) describing how its export is
 parsed. Decisions about sources we've ruled out live in [`docs/adr/`](adr/).
 
 Entry point: [`python -m ingest`](../ingest/__main__.py) →
-[`ingest/cli.py:main`](../ingest/cli.py). End-to-end flow:
+[`ingest/cli.py:main`](../ingest/cli.py). Several exports, even from different
+apps, can be combined in one run (`--input telegram:… --input whatsapp:…`).
+[`ingest/sources.py`](../ingest/sources.py) parses each one with its adapter and
+builds its samples. Chat ids are prefixed per export so chats from different
+exports never merge. The combined samples then go through the shared stages
+below once. End-to-end flow:
 
 ```
 export (platform-specific)

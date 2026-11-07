@@ -2,6 +2,11 @@
 
     python -m ingest --source telegram --input data/result.json
 
+    # several exports in one run -> one combined dataset
+    python -m ingest --input telegram:data/result.json \
+                     --input "whatsapp:data/WhatsApp Chat with Alice.txt" \
+                     --self-name "whatsapp:Your Name"
+
 Pipeline: adapter (parse) -> core (build samples) -> validator (optional LLM
 filter) -> writer (ShareGPT or raw JSONL).
 """
@@ -12,8 +17,8 @@ import sys
 
 import os.path
 
-from ingest import core, redactor, sharegpt
-from ingest.adapters import available_sources, get_adapter
+from ingest import core, redactor, sharegpt, sources
+from ingest.adapters import available_sources
 from ingest.validator import validate_samples
 
 DEFAULT_INPUT = "./data/result.json"
@@ -78,13 +83,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--source",
         default="telegram",
-        help=f"Chat source to parse. Supported: {', '.join(available_sources())}. "
-        "(More sources are planned — each is a drop-in adapter.)",
+        help=f"Chat source for inputs without a 'source:' prefix. Supported: "
+        f"{', '.join(available_sources())}.",
     )
     parser.add_argument(
         "--input",
-        default=DEFAULT_INPUT,
-        help=f"Path to the raw export (default: {DEFAULT_INPUT}).",
+        action="append",
+        default=None,
+        help=f"Path to a raw export (default: {DEFAULT_INPUT}). Repeat to combine "
+        "several exports into one dataset; prefix with the source to mix apps, "
+        "e.g. --input telegram:result.json --input 'whatsapp:Chat.txt'.",
     )
     parser.add_argument(
         "--output",
@@ -100,8 +108,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--self-name",
+        action="append",
         default=None,
-        help="Override auto-detection of which sender is you.",
+        help="Your display name, when a source can't detect it. Use "
+        "'source:Name' to set it for one source (repeatable); a plain name "
+        "applies to every source without its own.",
     )
     parser.add_argument(
         "--conversation-gap",
@@ -180,7 +191,9 @@ def main(argv=None) -> int:
     banner.print_banner()
 
     try:
-        adapter = get_adapter(args.source)
+        specs = sources.resolve_specs(
+            args.input or [DEFAULT_INPUT], args.source, args.self_name or []
+        )
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -189,17 +202,18 @@ def main(argv=None) -> int:
         SHAREGPT_OUTPUT if args.format == "sharegpt" else JSONL_OUTPUT
     )
 
-    print(f"Loading {args.input} via '{args.source}' adapter...")
-    messages = adapter.parse(args.input, self_name=args.self_name)
-
-    print("Building conversation samples...")
-    samples = core.build_samples(
-        messages,
-        conversation_gap=args.conversation_gap,
-        message_chain=args.message_chain,
-        multi_speaker=args.multi_speaker,
-    )
+    try:
+        samples, results = sources.load_samples(
+            specs,
+            conversation_gap=args.conversation_gap,
+            message_chain=args.message_chain,
+            multi_speaker=args.multi_speaker,
+        )
+    except (OSError, ValueError) as e:  # missing file, unrecognised export, unknown self
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     print(f"Extracted {len(samples)} conversation samples.")
+    sources.print_summary(results)
 
     # --no-audit is the master off-switch; the granular flags disable one half.
     skip_scan = args.no_audit or args.skip_redact_scan
