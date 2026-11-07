@@ -3,8 +3,10 @@
     python -m unittest discover -s tests -t .
 """
 
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -49,6 +51,42 @@ class RecommendEpochsTest(unittest.TestCase):
     def test_no_dataset_warns(self):
         _, _, warnings = steps.recommend_epochs(0, 16)
         self.assertTrue(warnings)
+
+
+class SummaryTest(unittest.TestCase):
+    """Post-training visibility helpers — best-effort, never raise."""
+
+    def test_loss_summary_formats_trend(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "trainer_log.jsonl")
+            with open(p, "w") as f:
+                for s, loss in [(10, 8.0), (20, 4.0), (30, 3.0)]:
+                    f.write(json.dumps({"current_steps": s, "loss": loss}) + "\n")
+            out = steps._loss_summary(p)
+            self.assertIn("8.00", out)
+            self.assertIn("3.00", out)        # final
+            self.assertIn("min 3.00", out)
+
+    def test_loss_summary_missing_file(self):
+        self.assertIsNone(steps._loss_summary("/no/such/log.jsonl"))
+
+    def test_loss_summary_tolerates_partial_last_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "trainer_log.jsonl")
+            with open(p, "w") as f:
+                f.write(json.dumps({"loss": 5.0}) + "\n" + json.dumps({"loss": 2.0}) + "\n" + '{"loss": 1.')
+            self.assertIn("5.00 → 2.00", steps._loss_summary(p))
+
+    def test_lora_magnitudes_unreadable_adapter(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "adapter_model.safetensors")
+            with open(p, "wb") as f:
+                f.write(b"not a safetensors file")
+            self.assertIsNone(steps._lora_magnitudes(p))
+
+    def test_summarize_run_missing_dir_is_silent(self):
+        # Must not raise even when nothing exists.
+        steps.summarize_run("/no/such/output_dir")
 
 
 if __name__ == "__main__":
