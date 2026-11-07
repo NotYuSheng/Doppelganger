@@ -39,6 +39,7 @@ _SKIP_DIRS = {".git", "venv", ".venv", "node_modules", "__pycache__", "saves",
 APP_NAMES = {
     "telegram": "Telegram", "whatsapp": "WhatsApp", "instagram": "Instagram",
     "messenger": "Messenger", "line": "LINE", "signal": "Signal", "kakaotalk": "KakaoTalk",
+    "elicited": "Drills",
 }
 
 COUNTRY_NAMES = {
@@ -87,6 +88,8 @@ def _looks_like_telegram(path: str) -> bool:
 
 
 def _classify_file(name: str, path: str) -> Optional[str]:
+    if name == "elicited.jsonl":  # reply-drill answers (python -m doppelganger drills)
+        return "elicited"
     if name == "result.json" and _looks_like_telegram(path):
         return "telegram"
     if name.endswith(".txt") and (name.startswith("WhatsApp Chat") or name == "_chat.txt"):

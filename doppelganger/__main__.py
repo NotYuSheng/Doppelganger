@@ -84,6 +84,15 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--config", default=None, help="Training config (default: configs/train_lora[.local].yaml).")
     c.add_argument("--gpus", default=None, help="CUDA_VISIBLE_DEVICES, e.g. '0'.")
 
+    d = sub.add_parser("drills", help="Answer reply drills to create training data on purpose.")
+    d.add_argument("--level", choices=["quick", "standard", "thorough", "complete"], default=None,
+                   help="Coverage goal: quick (each situation once, ~6 min), standard (twice), "
+                        "thorough (every situation × audience), complete (all). Default: ask.")
+    d.add_argument("--count", type=int, default=None, help="Instead of a level: this many drills.")
+    d.add_argument("--situation", default=None,
+                   help="Only this situation (e.g. advice, apology, conflict, bad_news).")
+    d.add_argument("--report", action="store_true", help="Just show what's covered so far.")
+
     au = sub.add_parser("auto", help="Run parse → audit end-to-end (optionally → train).")
     _add_parse_flags(au, with_redact=True)
     au.add_argument("--train", dest="do_train", action="store_true", help="Also run training after the dataset is built.")
@@ -99,6 +108,11 @@ def _dispatch(args: argparse.Namespace) -> int:
             multi_speaker=args.multi_speaker, locales=_locales(args.redact_locales),
             scan=not args.skip_redact_scan, group_chats=args.group_chats,
         )
+    if args.command == "drills":
+        from doppelganger import drills as drill_session
+        if args.report:
+            return drill_session.report()
+        return drill_session.run_session(count=args.count, situation=args.situation, level=args.level)
     if args.command == "audit":
         return steps.audit(redact=args.redact, locales=_locales(args.redact_locales),
                            validate=not args.skip_validation)
@@ -135,7 +149,9 @@ def _guided(step_fn) -> int:
 def _menu() -> int:
     from doppelganger import tui
     banner.print_banner()
+    from doppelganger import drills as drill_session
     runners = {
+        "drills": drill_session.run_session,
         "parse": lambda: _guided(steps.parse), "audit": lambda: steps.audit(country_hint=False),
         "train": steps.train,
         "merge": steps.merge, "chat": steps.chat,
@@ -149,7 +165,8 @@ def _menu() -> int:
         options += [f"  {'auto':<6}", f"  {'quit':<6}"]
         hints += ["guided setup, then parse → audit in one go", ""]
         keys += ["auto", "quit"]
-        choice = tui.select("What would you like to do?", options, hints=hints)
+        choice = tui.select("What would you like to do?", options, hints=hints,
+                            default=keys.index("parse"))
         if choice is None or keys[choice] == "quit":
             return 0
         name = keys[choice]

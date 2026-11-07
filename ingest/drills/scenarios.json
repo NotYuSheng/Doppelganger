@@ -1,0 +1,649 @@
+{
+ "version": 1,
+ "situations": [
+  {
+   "id": "advice",
+   "label": "Asking for advice"
+  },
+  {
+   "id": "plans",
+   "label": "Making plans"
+  },
+  {
+   "id": "decline",
+   "label": "Asking for something you'd turn down"
+  },
+  {
+   "id": "apology",
+   "label": "You let them down"
+  },
+  {
+   "id": "conflict",
+   "label": "Disagreement"
+  },
+  {
+   "id": "good_news",
+   "label": "Good news"
+  },
+  {
+   "id": "bad_news",
+   "label": "Bad news"
+  },
+  {
+   "id": "explain",
+   "label": "Asking you to explain"
+  },
+  {
+   "id": "opinion",
+   "label": "Asking your opinion"
+  },
+  {
+   "id": "recommend",
+   "label": "Asking for a recommendation"
+  },
+  {
+   "id": "catch_up",
+   "label": "Catching up"
+  },
+  {
+   "id": "feedback",
+   "label": "Asking for feedback"
+  }
+ ],
+ "audiences": [
+  {
+   "id": "friend",
+   "label": "A close friend"
+  },
+  {
+   "id": "family",
+   "label": "A family member"
+  },
+  {
+   "id": "colleague",
+   "label": "A colleague"
+  },
+  {
+   "id": "acquaintance",
+   "label": "Someone you don't know well"
+  }
+ ],
+ "scenarios": [
+  {
+   "id": "advice-friend-1",
+   "situation": "advice",
+   "audience": "friend",
+   "message": "should i take the job offer? more money but i'd have to move and i barely know anyone there"
+  },
+  {
+   "id": "advice-friend-2",
+   "situation": "advice",
+   "audience": "friend",
+   "message": "ok honest opinion, do i text them first or wait"
+  },
+  {
+   "id": "advice-family-1",
+   "situation": "advice",
+   "audience": "family",
+   "message": "i'm thinking of finally getting a car. new or second hand? what would you do"
+  },
+  {
+   "id": "advice-family-2",
+   "situation": "advice",
+   "audience": "family",
+   "message": "how do you deal with not being able to sleep? it's been a rough week"
+  },
+  {
+   "id": "advice-colleague-1",
+   "situation": "advice",
+   "audience": "colleague",
+   "message": "got any tips for my first time presenting to the leadership team tomorrow?"
+  },
+  {
+   "id": "advice-colleague-2",
+   "situation": "advice",
+   "audience": "colleague",
+   "message": "would you push back on this deadline or just grind it out?"
+  },
+  {
+   "id": "advice-acquaintance-1",
+   "situation": "advice",
+   "audience": "acquaintance",
+   "message": "hey, saw you know a bit about this — would you recommend getting into it as a beginner?"
+  },
+  {
+   "id": "advice-acquaintance-2",
+   "situation": "advice",
+   "audience": "acquaintance",
+   "message": "any advice for someone new to the area? where do people actually hang out"
+  },
+  {
+   "id": "plans-friend-1",
+   "situation": "plans",
+   "audience": "friend",
+   "message": "dinner this weekend? i'm free sat or sun"
+  },
+  {
+   "id": "plans-friend-2",
+   "situation": "plans",
+   "audience": "friend",
+   "message": "running 20 min late sorry!! still on?"
+  },
+  {
+   "id": "plans-family-1",
+   "situation": "plans",
+   "audience": "family",
+   "message": "are you coming home for the holidays this year?"
+  },
+  {
+   "id": "plans-family-2",
+   "situation": "plans",
+   "audience": "family",
+   "message": "can you pick me up from the airport on friday evening?"
+  },
+  {
+   "id": "plans-colleague-1",
+   "situation": "plans",
+   "audience": "colleague",
+   "message": "can we move our 1:1 to thursday? something came up"
+  },
+  {
+   "id": "plans-colleague-2",
+   "situation": "plans",
+   "audience": "colleague",
+   "message": "a few of us are getting lunch, want to join?"
+  },
+  {
+   "id": "plans-acquaintance-1",
+   "situation": "plans",
+   "audience": "acquaintance",
+   "message": "we should grab coffee sometime! when are you free?"
+  },
+  {
+   "id": "plans-acquaintance-2",
+   "situation": "plans",
+   "audience": "acquaintance",
+   "message": "hey, are you still coming to the meetup tonight?"
+  },
+  {
+   "id": "decline-friend-1",
+   "situation": "decline",
+   "audience": "friend",
+   "message": "come out tonight!! it's been forever"
+  },
+  {
+   "id": "decline-friend-2",
+   "situation": "decline",
+   "audience": "friend",
+   "message": "can i borrow some money till next week? kinda stuck"
+  },
+  {
+   "id": "decline-family-1",
+   "situation": "decline",
+   "audience": "family",
+   "message": "can you help your cousin move this saturday? they need extra hands"
+  },
+  {
+   "id": "decline-family-2",
+   "situation": "decline",
+   "audience": "family",
+   "message": "you should come to the wedding, everyone's asking about you"
+  },
+  {
+   "id": "decline-colleague-1",
+   "situation": "decline",
+   "audience": "colleague",
+   "message": "could you take on this extra project? i know it's a lot"
+  },
+  {
+   "id": "decline-colleague-2",
+   "situation": "decline",
+   "audience": "colleague",
+   "message": "want to join the weekend hackathon team?"
+  },
+  {
+   "id": "decline-acquaintance-1",
+   "situation": "decline",
+   "audience": "acquaintance",
+   "message": "would you be up for helping me with my side project? unpaid for now but could be big"
+  },
+  {
+   "id": "decline-acquaintance-2",
+   "situation": "decline",
+   "audience": "acquaintance",
+   "message": "you should join our group, we meet every tuesday night"
+  },
+  {
+   "id": "apology-friend-1",
+   "situation": "apology",
+   "audience": "friend",
+   "message": "kinda hurt you didn't show up yesterday tbh"
+  },
+  {
+   "id": "apology-friend-2",
+   "situation": "apology",
+   "audience": "friend",
+   "message": "you never replied to my message last week..."
+  },
+  {
+   "id": "apology-family-1",
+   "situation": "apology",
+   "audience": "family",
+   "message": "you forgot to call on my birthday"
+  },
+  {
+   "id": "apology-family-2",
+   "situation": "apology",
+   "audience": "family",
+   "message": "we waited for you for an hour, what happened?"
+  },
+  {
+   "id": "apology-colleague-1",
+   "situation": "apology",
+   "audience": "colleague",
+   "message": "the numbers in your report were off, the client noticed"
+  },
+  {
+   "id": "apology-colleague-2",
+   "situation": "apology",
+   "audience": "colleague",
+   "message": "hey, you said you'd send that file yesterday?"
+  },
+  {
+   "id": "apology-acquaintance-1",
+   "situation": "apology",
+   "audience": "acquaintance",
+   "message": "i think you accidentally took my umbrella from the cafe"
+  },
+  {
+   "id": "apology-acquaintance-2",
+   "situation": "apology",
+   "audience": "acquaintance",
+   "message": "you were supposed to confirm the booking, it got cancelled"
+  },
+  {
+   "id": "conflict-friend-1",
+   "situation": "conflict",
+   "audience": "friend",
+   "message": "honestly i think you were out of line last night"
+  },
+  {
+   "id": "conflict-friend-2",
+   "situation": "conflict",
+   "audience": "friend",
+   "message": "you always pick the restaurant, can someone else choose for once"
+  },
+  {
+   "id": "conflict-family-1",
+   "situation": "conflict",
+   "audience": "family",
+   "message": "i don't think that job is a good idea for you"
+  },
+  {
+   "id": "conflict-family-2",
+   "situation": "conflict",
+   "audience": "family",
+   "message": "why do you never visit anymore?"
+  },
+  {
+   "id": "conflict-colleague-1",
+   "situation": "conflict",
+   "audience": "colleague",
+   "message": "i don't agree with the direction you proposed in the meeting"
+  },
+  {
+   "id": "conflict-colleague-2",
+   "situation": "conflict",
+   "audience": "colleague",
+   "message": "can we talk about how the work got split? i feel like i'm doing most of it"
+  },
+  {
+   "id": "conflict-acquaintance-1",
+   "situation": "conflict",
+   "audience": "acquaintance",
+   "message": "i think your take in the group chat was pretty wrong"
+  },
+  {
+   "id": "conflict-acquaintance-2",
+   "situation": "conflict",
+   "audience": "acquaintance",
+   "message": "your dog keeps barking at night, it's been really hard to sleep"
+  },
+  {
+   "id": "good_news-friend-1",
+   "situation": "good_news",
+   "audience": "friend",
+   "message": "I GOT THE JOB!!!"
+  },
+  {
+   "id": "good_news-friend-2",
+   "situation": "good_news",
+   "audience": "friend",
+   "message": "we're engaged 💍"
+  },
+  {
+   "id": "good_news-family-1",
+   "situation": "good_news",
+   "audience": "family",
+   "message": "your sister passed her exams!"
+  },
+  {
+   "id": "good_news-family-2",
+   "situation": "good_news",
+   "audience": "family",
+   "message": "guess what, we're finally renovating the kitchen"
+  },
+  {
+   "id": "good_news-colleague-1",
+   "situation": "good_news",
+   "audience": "colleague",
+   "message": "our proposal got approved!"
+  },
+  {
+   "id": "good_news-colleague-2",
+   "situation": "good_news",
+   "audience": "colleague",
+   "message": "just wanted to say — i got promoted, thanks for all the help"
+  },
+  {
+   "id": "good_news-acquaintance-1",
+   "situation": "good_news",
+   "audience": "acquaintance",
+   "message": "hey! just finished my first marathon 🏃"
+  },
+  {
+   "id": "good_news-acquaintance-2",
+   "situation": "good_news",
+   "audience": "acquaintance",
+   "message": "the event we organised sold out!"
+  },
+  {
+   "id": "bad_news-friend-1",
+   "situation": "bad_news",
+   "audience": "friend",
+   "message": "got laid off today. kinda in shock"
+  },
+  {
+   "id": "bad_news-friend-2",
+   "situation": "bad_news",
+   "audience": "friend",
+   "message": "we broke up"
+  },
+  {
+   "id": "bad_news-family-1",
+   "situation": "bad_news",
+   "audience": "family",
+   "message": "grandma's in the hospital, they're running tests"
+  },
+  {
+   "id": "bad_news-family-2",
+   "situation": "bad_news",
+   "audience": "family",
+   "message": "didn't get the house we wanted, someone outbid us"
+  },
+  {
+   "id": "bad_news-colleague-1",
+   "situation": "bad_news",
+   "audience": "colleague",
+   "message": "the project got cancelled, months of work gone"
+  },
+  {
+   "id": "bad_news-colleague-2",
+   "situation": "bad_news",
+   "audience": "colleague",
+   "message": "i won't be in this week, family emergency"
+  },
+  {
+   "id": "bad_news-acquaintance-1",
+   "situation": "bad_news",
+   "audience": "acquaintance",
+   "message": "had to put my cat down this morning"
+  },
+  {
+   "id": "bad_news-acquaintance-2",
+   "situation": "bad_news",
+   "audience": "acquaintance",
+   "message": "my flight got cancelled and i'm stuck at the airport overnight"
+  },
+  {
+   "id": "explain-friend-1",
+   "situation": "explain",
+   "audience": "friend",
+   "message": "wait what do you actually do at work again"
+  },
+  {
+   "id": "explain-friend-2",
+   "situation": "explain",
+   "audience": "friend",
+   "message": "how does the thing you're always talking about actually work?"
+  },
+  {
+   "id": "explain-family-1",
+   "situation": "explain",
+   "audience": "family",
+   "message": "can you explain what you're studying / working on, in simple words?"
+  },
+  {
+   "id": "explain-family-2",
+   "situation": "explain",
+   "audience": "family",
+   "message": "my phone keeps saying the storage is full, what do i do?"
+  },
+  {
+   "id": "explain-colleague-1",
+   "situation": "explain",
+   "audience": "colleague",
+   "message": "can you walk me through why we did it this way?"
+  },
+  {
+   "id": "explain-colleague-2",
+   "situation": "explain",
+   "audience": "colleague",
+   "message": "i'm new to this — what's the difference between the two options?"
+  },
+  {
+   "id": "explain-acquaintance-1",
+   "situation": "explain",
+   "audience": "acquaintance",
+   "message": "so what got you into what you do?"
+  },
+  {
+   "id": "explain-acquaintance-2",
+   "situation": "explain",
+   "audience": "acquaintance",
+   "message": "i saw your post, could you explain it a bit more?"
+  },
+  {
+   "id": "opinion-friend-1",
+   "situation": "opinion",
+   "audience": "friend",
+   "message": "hot take: pineapple on pizza is fine. thoughts?"
+  },
+  {
+   "id": "opinion-friend-2",
+   "situation": "opinion",
+   "audience": "friend",
+   "message": "is it worth upgrading my phone this year or nah"
+  },
+  {
+   "id": "opinion-family-1",
+   "situation": "opinion",
+   "audience": "family",
+   "message": "what did you think of the movie we watched?"
+  },
+  {
+   "id": "opinion-family-2",
+   "situation": "opinion",
+   "audience": "family",
+   "message": "be honest, do you like the new haircut?"
+  },
+  {
+   "id": "opinion-colleague-1",
+   "situation": "opinion",
+   "audience": "colleague",
+   "message": "what's your take on the new office policy?"
+  },
+  {
+   "id": "opinion-colleague-2",
+   "situation": "opinion",
+   "audience": "colleague",
+   "message": "do you think we should switch tools or stick with what we have?"
+  },
+  {
+   "id": "opinion-acquaintance-1",
+   "situation": "opinion",
+   "audience": "acquaintance",
+   "message": "what's the best thing you've read or watched lately?"
+  },
+  {
+   "id": "opinion-acquaintance-2",
+   "situation": "opinion",
+   "audience": "acquaintance",
+   "message": "do you think this city is a good place to live?"
+  },
+  {
+   "id": "recommend-friend-1",
+   "situation": "recommend",
+   "audience": "friend",
+   "message": "need a show to binge, go"
+  },
+  {
+   "id": "recommend-friend-2",
+   "situation": "recommend",
+   "audience": "friend",
+   "message": "where should i take my date on friday?"
+  },
+  {
+   "id": "recommend-family-1",
+   "situation": "recommend",
+   "audience": "family",
+   "message": "what should i get your dad for his birthday?"
+  },
+  {
+   "id": "recommend-family-2",
+   "situation": "recommend",
+   "audience": "family",
+   "message": "any good recipes? i'm bored of cooking the same things"
+  },
+  {
+   "id": "recommend-colleague-1",
+   "situation": "recommend",
+   "audience": "colleague",
+   "message": "know any good places to eat near the office?"
+  },
+  {
+   "id": "recommend-colleague-2",
+   "situation": "recommend",
+   "audience": "colleague",
+   "message": "what laptop setup do you use? thinking of changing mine"
+  },
+  {
+   "id": "recommend-acquaintance-1",
+   "situation": "recommend",
+   "audience": "acquaintance",
+   "message": "visiting your city next month — anything i shouldn't miss?"
+  },
+  {
+   "id": "recommend-acquaintance-2",
+   "situation": "recommend",
+   "audience": "acquaintance",
+   "message": "any podcasts or books you'd recommend to get started?"
+  },
+  {
+   "id": "catch_up-friend-1",
+   "situation": "catch_up",
+   "audience": "friend",
+   "message": "yo how've you been?? feels like ages"
+  },
+  {
+   "id": "catch_up-friend-2",
+   "situation": "catch_up",
+   "audience": "friend",
+   "message": "what did you get up to this weekend?"
+  },
+  {
+   "id": "catch_up-family-1",
+   "situation": "catch_up",
+   "audience": "family",
+   "message": "how's everything going? we haven't heard from you"
+  },
+  {
+   "id": "catch_up-family-2",
+   "situation": "catch_up",
+   "audience": "family",
+   "message": "how was your trip?"
+  },
+  {
+   "id": "catch_up-colleague-1",
+   "situation": "catch_up",
+   "audience": "colleague",
+   "message": "how was your holiday?"
+  },
+  {
+   "id": "catch_up-colleague-2",
+   "situation": "catch_up",
+   "audience": "colleague",
+   "message": "how's the new team treating you?"
+  },
+  {
+   "id": "catch_up-acquaintance-1",
+   "situation": "catch_up",
+   "audience": "acquaintance",
+   "message": "hey! long time, what are you up to these days?"
+  },
+  {
+   "id": "catch_up-acquaintance-2",
+   "situation": "catch_up",
+   "audience": "acquaintance",
+   "message": "how's the new place, all settled in?"
+  },
+  {
+   "id": "feedback-friend-1",
+   "situation": "feedback",
+   "audience": "friend",
+   "message": "can you read my cover letter and tell me if it's terrible"
+  },
+  {
+   "id": "feedback-friend-2",
+   "situation": "feedback",
+   "audience": "friend",
+   "message": "rate my outfit for tonight, honestly 😅"
+  },
+  {
+   "id": "feedback-family-1",
+   "situation": "feedback",
+   "audience": "family",
+   "message": "what do you think of the business idea i told you about?"
+  },
+  {
+   "id": "feedback-family-2",
+   "situation": "feedback",
+   "audience": "family",
+   "message": "i made dinner from a new recipe, be honest how was it"
+  },
+  {
+   "id": "feedback-colleague-1",
+   "situation": "feedback",
+   "audience": "colleague",
+   "message": "could you review my draft before i send it out?"
+  },
+  {
+   "id": "feedback-colleague-2",
+   "situation": "feedback",
+   "audience": "colleague",
+   "message": "how do you think my presentation went?"
+  },
+  {
+   "id": "feedback-acquaintance-1",
+   "situation": "feedback",
+   "audience": "acquaintance",
+   "message": "would love your thoughts on my portfolio if you have a minute"
+  },
+  {
+   "id": "feedback-acquaintance-2",
+   "situation": "feedback",
+   "audience": "acquaintance",
+   "message": "i'm thinking of starting a newsletter, does this pitch make sense?"
+  }
+ ]
+}

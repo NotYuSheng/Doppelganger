@@ -15,6 +15,9 @@ ChatExport*/
 # (Generated demo outputs like demo/sample_sharegpt.json stay ignored via *.json.)
 !demo/sample_export.json
 
+# Reply-drill scenario library (shipped prompts, no personal data)
+!ingest/drills/scenarios.json
+
 # Personal training/export overrides — copy a tracked config to *.local.yaml and
 # edit that for your own model/hardware; it stays out of git.
 configs/*.local.yaml
