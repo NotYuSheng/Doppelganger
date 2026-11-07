@@ -237,6 +237,7 @@ def parse(
     group_chats: str = "keep",
     show_next: bool = True,
     country_hint: bool = True,
+    ner: Optional[bool] = None,
 ) -> int:
     """Stage 1: export → conversations → (scan). Writes raw samples + report.
 
@@ -281,30 +282,57 @@ def parse(
     written = sharegpt.write_jsonl(samples, RAW_PATH)
     print(f"Wrote {written} raw conversation samples to {RAW_PATH}.")
     _save_self_names(n for r in results for n in r.self_names)
+    if ner is not None:  # chosen in the guided setup: remembered for audit
+        _save_scan_prefs(ner=bool(ner))
     if show_next:
         print(f"Next: review {REPORT_PATH}, then run `audit`.")
     return 0
 
 
-SELF_NAMES_PATH = os.path.join(DATA_DIR, "self_names.json")
+SELF_NAMES_FILE = "self_names.json"
+SCAN_PREFS_FILE = "scan_prefs.json"
+
+
+def _data_path(name: str) -> str:
+    # Resolved at call time, so code (and tests) that repoint DATA_DIR are honoured.
+    return os.path.join(DATA_DIR, name)
 
 
 def _save_self_names(names) -> None:
     """Remember the names "you" appear under, so audit's NER pass never redacts them."""
     try:
-        with open(SELF_NAMES_PATH, "w", encoding="utf-8") as f:
+        with open(_data_path(SELF_NAMES_FILE), "w", encoding="utf-8") as f:
             json.dump(sorted(set(names)), f, ensure_ascii=False)
-    except OSError:
-        pass
+    except OSError as e:
+        print(f"[parse] Warning: couldn't save your names for the NER allowlist ({e}); "
+              "pass --ner-allow \"Your Name\" to audit if you use --ner-redact.")
 
 
 def _load_self_names() -> List[str]:
     try:
-        with open(SELF_NAMES_PATH, encoding="utf-8") as f:
+        with open(_data_path(SELF_NAMES_FILE), encoding="utf-8") as f:
             names = json.load(f)
         return [n for n in names if isinstance(n, str)]
     except (OSError, ValueError, TypeError):
         return []
+
+
+def _save_scan_prefs(**prefs) -> None:
+    """Options chosen in the guided setup that a later ``audit`` should reuse."""
+    try:
+        with open(_data_path(SCAN_PREFS_FILE), "w", encoding="utf-8") as f:
+            json.dump(prefs, f)
+    except OSError:
+        pass
+
+
+def _scan_prefs() -> dict:
+    try:
+        with open(_data_path(SCAN_PREFS_FILE), encoding="utf-8") as f:
+            prefs = json.load(f)
+        return prefs if isinstance(prefs, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 def _previous_locales() -> Optional[List[str]]:
@@ -324,9 +352,10 @@ def audit(
     validate: bool = True,
     country_hint: bool = True,
     holdout: Optional[float] = None,
-    ner: bool = False,
+    ner: Optional[bool] = None,
     ner_model: str = "en_core_web_sm",
     ner_allow: Optional[List[str]] = None,
+    ner_strict_self: bool = False,
 ) -> int:
     """Stage 2: review scan → redact → (optional LLM quality audit) → dataset.
 
@@ -359,12 +388,20 @@ def audit(
     # Re-derive the scan summary so audit is self-contained (regex is cheap).
     report = redactor.scan_samples(samples, locales=locales)
     ner_findings, ner_held = [], []
+    if ner is None:
+        ner = bool(_scan_prefs().get("ner"))  # as chosen in the guided setup, if any
     if ner:
         allow = _load_self_names() + list(ner_allow or [])
-        ner_findings = redactor.run_ner(samples, ner_model, allow)
+        recognise = redactor.load_ner(ner_model)  # loaded once for both scans
+        ner_findings = redactor.run_ner(samples, recognise, allow, strict_self=ner_strict_self)
         redactor.merge_findings(report, ner_findings)
         if held and redact != "off":
-            ner_held = redactor.run_ner(held, ner_model, allow)
+            ner_held = redactor.run_ner(held, recognise, allow, strict_self=ner_strict_self,
+                                        announce=False)
+        if redact == "drop":
+            ner_findings, ner_held = redactor.for_drop(ner_findings), redactor.for_drop(ner_held)
+            print("[redactor] --redact drop: only names drop conversations; places and "
+                  "organisations are kept (use --redact replace to redact them).")
     redactor.write_report(report, REPORT_PATH)
     redactor.print_summary(report, REPORT_PATH, mode=redact, country_hint=country_hint)
 
@@ -554,9 +591,10 @@ def auto(
     redact: str = "replace",
     gpus: Optional[str] = None,
     show_banner: bool = True,
-    ner: bool = False,
+    ner: Optional[bool] = None,
     ner_model: str = "en_core_web_sm",
     ner_allow: Optional[List[str]] = None,
+    ner_strict_self: bool = False,
     **parse_kwargs,
 ) -> int:
     """Run the pipeline end-to-end, unattended (like the old one-shot ingest).
@@ -577,7 +615,7 @@ def auto(
         return rc
     rc = audit(redact=redact, locales=parse_kwargs.get("locales"),
                country_hint=parse_kwargs.get("country_hint", True), ner=ner,
-               ner_model=ner_model, ner_allow=ner_allow)
+               ner_model=ner_model, ner_allow=ner_allow, ner_strict_self=ner_strict_self)
     if rc:
         return rc
     if do_train:

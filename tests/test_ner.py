@@ -88,10 +88,60 @@ class ApplyTest(unittest.TestCase):
 
     def test_unavailable_explains_and_skips(self):
         with mock.patch.object(ner, "load_spacy", side_effect=ner.NerUnavailable("install spaCy")):
-            findings, out = _quiet(redactor.run_ner, SAMPLES, "en_core_web_sm", [])
-        self.assertEqual(findings, [])
+            recognise, out = _quiet(redactor.load_ner, "en_core_web_sm")
+        self.assertIsNone(recognise)
+        self.assertEqual(redactor.run_ner(SAMPLES, recognise, []), [])
         self.assertIn("install spaCy", out)
         self.assertIn("Skipping NER", out)
+
+
+class ReviewRegressionTest(unittest.TestCase):
+    def test_two_letter_names_kept_acronyms_and_slang_dropped(self):
+        samples = [[{"role": "user", "text": "Li and Ng met at the IC office, ya"}]]
+        findings = ner.ner_scan_samples(samples, stub({"Li": "PERSON", "Ng": "PERSON",
+                                                       "IC": "PERSON", "ya": "PERSON"}))
+        self.assertEqual(len(findings), 2)  # Li, Ng
+
+    def test_strict_self_allows_only_full_names(self):
+        samples = [[{"role": "user", "text": "Alex Tan met another Alex"}]]
+        rec = stub({"Alex Tan": "PERSON", "Alex": "PERSON"})
+        loose = ner.ner_scan_samples(samples, lambda t: [(0, 8, "PERSON"), (21, 25, "PERSON")], ["Alex Tan"])
+        strict = ner.ner_scan_samples(samples, lambda t: [(0, 8, "PERSON"), (21, 25, "PERSON")], ["Alex Tan"],
+                                      strict_self=True)
+        self.assertEqual(len(loose), 0)
+        self.assertEqual([(f["start"], f["end"]) for f in strict], [(21, 25)])
+
+    def test_batched_recogniser_is_used(self):
+        calls = []
+
+        def single(text):
+            raise AssertionError("per-turn path used")
+
+        single.many = lambda texts: calls.append(len(texts)) or [[] for _ in texts]
+        ner.ner_scan_samples(SAMPLES, single)
+        self.assertEqual(calls, [2])
+
+    def test_drop_mode_only_names_drop_conversations(self):
+        findings = [{"detector": "ner", "category": "LOCATION"}, {"detector": "ner", "category": "PERSON"},
+                    {"detector": "llm", "category": "ADDRESS"}]
+        self.assertEqual([f["category"] for f in redactor.for_drop(findings)], ["PERSON", "ADDRESS"])
+
+    def test_no_allowlist_warns(self):
+        _, out = _quiet(redactor.run_ner, SAMPLES, stub({}), [])
+        self.assertIn("WARNING: no names of yours to protect", out)
+
+    def test_self_names_follow_data_dir(self):
+        from doppelganger import steps
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(steps, "DATA_DIR", d):
+            steps._save_self_names(["Sam"])
+            self.assertTrue(os.path.exists(os.path.join(d, "self_names.json")))
+            self.assertEqual(steps._load_self_names(), ["Sam"])
+
+    def test_guided_choice_is_remembered_for_audit(self):
+        from doppelganger import steps
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(steps, "DATA_DIR", d):
+            steps._save_scan_prefs(ner=True)
+            self.assertTrue(steps._scan_prefs()["ner"])
 
 
 class WiringTest(unittest.TestCase):
@@ -123,9 +173,9 @@ class WiringTest(unittest.TestCase):
         from doppelganger import steps
         from ingest import sharegpt
         with tempfile.TemporaryDirectory() as d:
-            paths = {"RAW_PATH": "raw.jsonl", "DATASET_PATH": "ds.json", "REPORT_PATH": "r.json",
-                     "SELF_NAMES_PATH": "self.json"}
+            paths = {"RAW_PATH": "raw.jsonl", "DATASET_PATH": "ds.json", "REPORT_PATH": "r.json"}
             patches = [mock.patch.object(steps, k, os.path.join(d, v)) for k, v in paths.items()]
+            patches.append(mock.patch.object(steps, "DATA_DIR", d))
             for p in patches:
                 p.start()
             try:

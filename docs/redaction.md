@@ -83,10 +83,19 @@ python -m doppelganger audit --ner-redact      # also on auto
 - **Your own names are never redacted.** The names you appear under in each
   export are allowlisted automatically, including each word of a full name, so
   "Alex Tan" also covers "Alex". `parse` remembers them for `audit` in
-  `data/self_names.json`. Add more with `--ner-allow "Name"`.
+  `data/self_names.json`; if there are none, audit warns before redacting. Add
+  more with `--ner-allow "Name"`.
+  - Trade-off: someone else who shares your first name or surname isn't
+    redacted either. `--ner-strict-self` allows only your full name(s).
 - **Chat slang:** classical models trained on news text sometimes read slang as
-  names ("see ya" → PERSON). Entities shorter than 3 characters and common chat
-  words (ya, bro, lol, sis, …) are ignored.
+  names ("see ya" → PERSON). Common chat words (ya, bro, lol, sis, …) are
+  ignored. Two-letter entities count only when written like a name ("Li",
+  "Ng"), not acronyms ("IC") or lowercase slang.
+- **With `--redact drop`,** only names drop a conversation. Almost every chat
+  mentions some place or brand, so dropping on those would empty the dataset;
+  use `replace` to redact them.
+- **In the menu:** the guided setup asks "Also redact names, places and
+  organisations?", and a later `audit` remembers the answer.
 - **Regex wins on overlap:** if an NER span overlaps a regex detection, the
   regex's category labels the redaction, since it's pattern/checksum-validated.
 - **Language:** coverage is best for the model's language. The LLM tier

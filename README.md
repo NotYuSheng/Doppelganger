@@ -244,7 +244,7 @@ python -m spacy download en_core_web_sm          # or xx_ent_wiki_sm for multili
 python -m ingest --source telegram --ner-redact --redact replace
 ```
 
-It works best for the model's language and can misread slang. Common chat words like "ya" or "bro" are ignored, and a regex-validated detection (e.g. an NRIC) always keeps its label over an NER guess. For mixed-language chats, the LLM tier below does better. Details: [docs/redaction.md](docs/redaction.md#names-places-and-organisations-ner).
+It works best for the model's language and can misread slang. Common chat words like "ya" or "bro" are ignored, and a regex-validated detection (e.g. an NRIC) always keeps its label over an NER guess. The guided menu asks whether to turn it on. For mixed-language chats, the LLM tier below does better. Details: [docs/redaction.md](docs/redaction.md#names-places-and-organisations-ner).
 
 ### LLM-assisted redaction
 

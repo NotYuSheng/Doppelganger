@@ -45,13 +45,8 @@ def _add_parse_flags(p: argparse.ArgumentParser, with_redact: bool = False) -> N
 
 
 def _add_ner_flags(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--ner-redact", action="store_true",
-                   help="Also find names, places and organisations offline with spaCy NER "
-                        "(pip install -r requirements-ner.txt). Your own names are never redacted.")
-    p.add_argument("--ner-model", default="en_core_web_sm",
-                   help="spaCy model (default en_core_web_sm; xx_ent_wiki_sm for multilingual).")
-    p.add_argument("--ner-allow", action="append", default=[],
-                   help="A name NER should never redact (repeatable).")
+    from ingest import ner
+    ner.add_cli_flags(p)
 
 
 def _fraction(value: str) -> float:
@@ -181,7 +176,8 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "audit":
         return steps.audit(redact=args.redact, locales=_locales(args.redact_locales),
                            validate=not args.skip_validation, holdout=args.holdout,
-                           ner=args.ner_redact, ner_model=args.ner_model, ner_allow=args.ner_allow)
+                           ner=args.ner_redact or None, ner_model=args.ner_model,
+                           ner_allow=args.ner_allow, ner_strict_self=args.ner_strict_self)
     if args.command == "serve":
         return steps.serve(config=args.config, gpus=args.gpus, base=args.base, port=args.port)
     if args.command == "eval":
@@ -200,8 +196,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             source=args.source, input_path=args.input_path, self_name=args.self_name,
             conversation_gap=args.conversation_gap, message_chain=args.message_chain,
             multi_speaker=args.multi_speaker, locales=_locales(args.redact_locales),
-            group_chats=args.group_chats, ner=args.ner_redact, ner_model=args.ner_model,
-            ner_allow=args.ner_allow,
+            group_chats=args.group_chats, ner=args.ner_redact or None, ner_model=args.ner_model,
+            ner_allow=args.ner_allow, ner_strict_self=args.ner_strict_self,
         )
     return 2
 

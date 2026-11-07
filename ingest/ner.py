@@ -36,8 +36,8 @@ LABELS = {"PERSON": "PERSON", "PER": "PERSON",
 SEVERITY = {"PERSON": "medium", "LOCATION": "low", "ORG": "low"}
 
 # Classical NER models misread chat slang as names ("see ya" -> PERSON "ya").
-# Entities shorter than this, or in this list, are ignored.
-MIN_LENGTH = 3
+# These words are ignored. Two-letter entities are kept only when written like a
+# name ("Li", "Wu", "Ng"), not all-caps acronyms ("IC") or lowercase slang.
 CHAT_WORDS = {
     "lol", "lmao", "haha", "hahaha", "hehe", "omg", "btw", "idk", "tbh", "imo", "ngl",
     "bro", "bruh", "sis", "dude", "man", "mate", "babe", "fam", "yo", "ya", "yea", "yeah",
@@ -76,12 +76,50 @@ def load_spacy(model: str = DEFAULT_MODEL) -> Recogniser:
     def recognise(text: str) -> List[Tuple[int, int, str]]:
         return [(e.start_char, e.end_char, e.label_) for e in nlp(text).ents]
 
+    def many(texts: List[str]) -> List[List[Tuple[int, int, str]]]:
+        """Batched: much faster than one call per turn on large exports."""
+        return [[(e.start_char, e.end_char, e.label_) for e in doc.ents]
+                for doc in nlp.pipe(texts, batch_size=256)]
+
+    recognise.many = many
     return recognise
+
+
+def add_cli_flags(parser) -> None:
+    """The --ner-* flags, shared by ``python -m ingest`` and ``python -m doppelganger``."""
+    parser.add_argument(
+        "--ner-redact", action="store_true",
+        help="Also find names, places and organisations offline with spaCy NER "
+        "(optional install: pip install -r requirements-ner.txt). Your own names are "
+        "never redacted.")
+    parser.add_argument(
+        "--ner-model", default=DEFAULT_MODEL,
+        help=f"spaCy model for --ner-redact (default {DEFAULT_MODEL}; xx_ent_wiki_sm for multilingual).")
+    parser.add_argument(
+        "--ner-allow", action="append", default=[],
+        help="A name NER should never redact (repeatable). Your own names from the exports "
+        "are always allowed.")
+    parser.add_argument(
+        "--ner-strict-self", action="store_true",
+        help="Only skip your full name(s), not each word of them (so someone who shares "
+        "your first name is still redacted).")
+
+
+def _too_short_or_slang(span: str) -> bool:
+    s = span.strip()
+    if len(s) < 2 or s.lower() in CHAT_WORDS:
+        return True
+    return len(s) == 2 and not (s[0].isupper() and s[1].islower())
 
 
 def allowlist(names: Iterable[str]) -> Set[str]:
     """Lower-cased names plus their individual words ("Alex Tan" also allows
-    "Alex" and "Tan"), ignoring one-letter words."""
+    "Alex" and "Tan"), ignoring one-letter words.
+
+    Trade-off: in your own chats, "Alex" almost always means you, so the words
+    are allowed too. The cost is that someone else who shares your first name or
+    surname isn't redacted. ``--ner-strict-self`` allows only the full names.
+    """
     allowed: Set[str] = set()
     for name in names:
         name = (name or "").strip().lower()
@@ -101,34 +139,37 @@ def _allowed(span: str, allowed: Set[str]) -> bool:
 
 
 def ner_scan_samples(samples, recognise: Recogniser,
-                     allow: Optional[Sequence[str]] = None) -> List[dict]:
+                     allow: Optional[Sequence[str]] = None, strict_self: bool = False) -> List[dict]:
     """NER findings for every turn, in the same shape as the LLM tier's (with
-    offsets, so ``redactor.apply`` can replace them)."""
-    allowed = allowlist(allow or [])
+    offsets, so ``redactor.apply`` can replace them). ``strict_self`` allows
+    only full names, not their individual words."""
+    allowed = ({(n or "").strip().lower() for n in (allow or []) if len((n or "").strip()) > 1}
+               if strict_self else allowlist(allow or []))
     findings: List[dict] = []
-    for ci, turns in enumerate(samples):
-        for ti, turn in enumerate(turns):
-            text = turn.get("text", "")
-            if not text.strip():
+    where = [(ci, ti, turn) for ci, turns in enumerate(samples)
+             for ti, turn in enumerate(turns) if turn.get("text", "").strip()]
+    texts = [turn["text"] for _, _, turn in where]
+    many = getattr(recognise, "many", None)
+    all_spans = many(texts) if many else [recognise(t) for t in texts]
+    for (ci, ti, turn), text, spans in zip(where, texts, all_spans):
+        for start, end, label in spans:
+            category = LABELS.get(label)
+            span = text[start:end]
+            if not category or not span.strip() or _allowed(span, allowed):
                 continue
-            for start, end, label in recognise(text):
-                category = LABELS.get(label)
-                span = text[start:end]
-                if not category or not span.strip() or _allowed(span, allowed):
-                    continue
-                if len(span.strip()) < MIN_LENGTH or span.strip().lower() in CHAT_WORDS:
-                    continue  # chat slang misread as a name
-                if span.startswith("[") and span.endswith("]"):
-                    continue  # an existing [PLACEHOLDER]
-                findings.append({
-                    "conversation": ci,
-                    "turn": ti,
-                    "role": turn.get("role"),
-                    "category": category,
-                    "detector": "ner",
-                    "severity": SEVERITY[category],
-                    "start": start,
-                    "end": end,
-                    "preview": redaction.mask(span),
-                })
+            if _too_short_or_slang(span):
+                continue  # chat slang / acronyms misread as names
+            if span.startswith("[") and span.endswith("]"):
+                continue  # an existing [PLACEHOLDER]
+            findings.append({
+                "conversation": ci,
+                "turn": ti,
+                "role": turn.get("role"),
+                "category": category,
+                "detector": "ner",
+                "severity": SEVERITY[category],
+                "start": start,
+                "end": end,
+                "preview": redaction.mask(span),
+            })
     return findings

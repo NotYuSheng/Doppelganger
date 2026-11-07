@@ -257,19 +257,38 @@ def llm_scan_samples(samples, client, model) -> List[dict]:
     return findings
 
 
-def run_ner(samples, model: str, allow) -> List[dict]:
-    """The optional NER tier (see :mod:`ingest.ner`). Returns its findings, or
-    [] with an explanation if spaCy or the model isn't installed."""
+def load_ner(model: str):
+    """The NER recogniser, or None (with an explanation) if spaCy or the model
+    isn't installed. Load once and reuse it for every scan."""
     from ingest import ner
     try:
-        recognise = ner.load_spacy(model)
+        return ner.load_spacy(model)
     except ner.NerUnavailable as e:
         print(f"[redactor] {e}\n[redactor] Skipping NER pass.")
+        return None
+
+
+def run_ner(samples, recognise, allow, strict_self: bool = False, announce: bool = True) -> List[dict]:
+    """The optional NER tier (see :mod:`ingest.ner`) with a loaded recogniser."""
+    from ingest import ner
+    if recognise is None:
         return []
     allow = sorted({a for a in allow if a})
-    print(f"[redactor] NER scan for names, places and organisations ({model})"
-          + (f"; not redacting your own name(s): {', '.join(allow)}" if allow else "") + "...")
-    return ner.ner_scan_samples(samples, recognise, allow)
+    if announce:
+        if allow:
+            print("[redactor] NER scan for names, places and organisations; not redacting "
+                  f"your own name(s): {', '.join(allow)}...")
+        else:
+            print("[redactor] NER scan for names, places and organisations. WARNING: no names of "
+                  "yours to protect (re-run parse, or pass --ner-allow \"Your Name\"), so your own "
+                  "name will be redacted too.")
+    return ner.ner_scan_samples(samples, recognise, allow, strict_self=strict_self)
+
+
+def for_drop(findings: List[dict]) -> List[dict]:
+    """With --redact drop, only NER names (not places/organisations) drop a
+    conversation: almost every chat mentions some place or brand."""
+    return [f for f in findings if f.get("detector") != "ner" or f.get("category") == "PERSON"]
 
 
 def merge_findings(report: dict, findings: List[dict]) -> dict:
