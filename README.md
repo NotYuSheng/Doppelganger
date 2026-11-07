@@ -200,6 +200,7 @@ Tiny machine? **Qwen2.5-1.5B-Instruct** or **Llama-3.2-3B-Instruct** also work, 
 
 Fine-tuning on real chat history may unintentionally encode personal identifiers, confidential conversations, or sensitive content.
 
+> [!CAUTION]
 > **Always review and sanitize your dataset before training.** You are responsible for compliance with privacy laws and personal data protection.
 
 ### Automated sensitive-data scan
