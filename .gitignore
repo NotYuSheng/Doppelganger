@@ -60,3 +60,6 @@ your_activity_across_facebook/
 
 # LINE chat exports — never commit ("[LINE] Chat with Alice.txt", "[LINE] Aliceとのトーク.txt")
 \[LINE\]*
+
+# Signal chat exports (Export chat history) — never commit
+signal-export-*/
