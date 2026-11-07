@@ -144,11 +144,17 @@ _SPARK = "▁▂▃▄▅▆▇█"
 
 
 def _loss_summary(log_path: str) -> Optional[str]:
+    rows = []
     try:
-        rows = [json.loads(l) for l in open(log_path, encoding="utf-8") if l.strip()]
+        with open(log_path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rows.append(json.loads(line))
+                except ValueError:
+                    continue  # e.g. a half-written last line
     except OSError:
         return None
-    losses = [r["loss"] for r in rows if "loss" in r]
+    losses = [r["loss"] for r in rows if isinstance(r, dict) and isinstance(r.get("loss"), (int, float))]
     if not losses:
         return None
     lo, hi = min(losses), max(losses)
@@ -169,16 +175,16 @@ def _lora_magnitudes(adapter_path: str) -> Optional[List[Tuple[str, float]]]:
         return None
     import collections
     import re
-    try:
-        f = safe_open(adapter_path, "pt")
-    except Exception:
-        return None
     a_norm, b_norm = {}, {}
-    for k in f.keys():
-        if "lora_A" in k:
-            a_norm[k.replace("lora_A", "")] = f.get_tensor(k).float().norm().item()
-        elif "lora_B" in k:
-            b_norm[k.replace("lora_B", "")] = f.get_tensor(k).float().norm().item()
+    try:
+        with safe_open(adapter_path, "pt") as f:
+            for k in f.keys():
+                if "lora_A" in k:
+                    a_norm[k.replace("lora_A", "")] = f.get_tensor(k).float().norm().item()
+                elif "lora_B" in k:
+                    b_norm[k.replace("lora_B", "")] = f.get_tensor(k).float().norm().item()
+    except Exception:  # unreadable adapter, torch missing, ...
+        return None
     mods: dict = collections.defaultdict(float)
     for base, an in a_norm.items():
         if base in b_norm:
@@ -382,7 +388,10 @@ def train(config: Optional[str] = None, gpus: Optional[str] = None,
                 pass
 
     if rc == 0 and output_dir:
-        summarize_run(output_dir)  # post-training only — no effect on training speed
+        try:
+            summarize_run(output_dir)  # post-training only — no effect on training speed
+        except Exception as e:  # the summary is a nicety; never fail a finished run
+            print(f"[summary] skipped: {e}")
     return rc
 
 
