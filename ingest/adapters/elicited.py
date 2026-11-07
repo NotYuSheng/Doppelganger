@@ -43,26 +43,49 @@ class ElicitedAdapter:
             )
         me = self_name or "Me"
         messages: List[NormalizedMessage] = []
-        records = [(r, f"drill:{r.get('scenario')}", _AUDIENCE_SENDER.get(r.get("audience"), "Them"),
-                    r.get("message", "")) for r in load_answers(path)]
-        records += [(r, f"interview:{r.get('topic')}", "Interviewer", r.get("question", ""))
-                    for r in load_turns(path)]
-        for n, (record, kind, them, prompt) in enumerate(records):
-            base = _timestamp(record.get("answered_at"), fallback=n * 3600)
-            chat_id = f"{kind}:{n}"
-            messages.append(NormalizedMessage(
-                chat_id=chat_id, timestamp=base - 60, sender_id=them, sender_is_self=False,
-                text=str(prompt).strip(),
-            ))
-            for i, line in enumerate(record["reply"]):
-                if str(line).strip():
-                    messages.append(NormalizedMessage(
-                        chat_id=chat_id, timestamp=base + i, sender_id=me, sender_is_self=True,
-                        text=str(line).strip(),
-                    ))
-        drills_n = sum(1 for r in records if r[1].startswith("drill"))
-        print(f"[elicited] Parsed {drills_n} drill answer(s) and {len(records) - drills_n} interview answer(s).")
+
+        # Each drill is its own conversation.
+        drills = load_answers(path)
+        for n, record in enumerate(drills):
+            them = _AUDIENCE_SENDER.get(record.get("audience"), "Them")
+            self._emit(messages, f"drill:{record.get('scenario')}:{n}", me,
+                       [(them, record.get("message", ""), record["reply"])],
+                       _timestamp(record.get("answered_at"), fallback=n * 3600))
+
+        # Interview answers: consecutive answers on the same topic form ONE
+        # conversation (opening question, answer, follow-up, answer, …), so a
+        # follow-up like "How did you get into that?" keeps the answer it
+        # refers to as context.
+        turns = load_turns(path)
+        runs: List[List[dict]] = []
+        for record in turns:
+            if runs and runs[-1][-1].get("topic") == record.get("topic"):
+                runs[-1].append(record)
+            else:
+                runs.append([record])
+        for n, run in enumerate(runs):
+            self._emit(messages, f"interview:{run[0].get('topic')}:{n}", me,
+                       [("Interviewer", r.get("question", ""), r["reply"]) for r in run],
+                       _timestamp(run[0].get("answered_at"), fallback=n * 3600))
+
+        print(f"[elicited] Parsed {len(drills)} drill answer(s) and {len(turns)} interview answer(s).")
         return messages
+
+    @staticmethod
+    def _emit(messages, chat_id, me, exchanges, base):
+        """Append prompt/reply exchanges with strictly increasing timestamps
+        (a couple of seconds apart, so they stay one conversation and in order)."""
+        t = base
+        for them, prompt, reply in exchanges:
+            messages.append(NormalizedMessage(chat_id=chat_id, timestamp=t, sender_id=them,
+                                              sender_is_self=False, text=str(prompt).strip()))
+            t += 2
+            for line in reply:
+                if str(line).strip():
+                    messages.append(NormalizedMessage(chat_id=chat_id, timestamp=t, sender_id=me,
+                                                      sender_is_self=True, text=str(line).strip()))
+                    t += 1
+            t += 2
 
 
 register(ElicitedAdapter())

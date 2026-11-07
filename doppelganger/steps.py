@@ -482,7 +482,9 @@ def chat(config: Optional[str] = None, gpus: Optional[str] = None, persona: bool
     from ingest.interview import PERSONA_PATH, load_card
     card = load_card(PERSONA_PATH) if persona else None
     if card:
-        args += ["--default_system", card]
+        # One "--opt=value" token: a card starting with "-" (e.g. a bullet) would
+        # otherwise be read as an option by LLaMA-Factory's argument parser.
+        args.append(f"--default_system={card}")
         print(f"Using your persona card ({PERSONA_PATH}) as the system prompt.")
     return _llamafactory(args, gpus=gpus)
 
@@ -546,6 +548,11 @@ def auto(
     return rc
 
 
+def interview_done() -> bool:
+    from ingest.interview import PERSONA_PATH
+    return os.path.exists(PERSONA_PATH)
+
+
 def drills_done() -> bool:
     from ingest import drills
     return bool(drills.load_answers(drills.DEFAULT_PATH))
@@ -554,8 +561,7 @@ def drills_done() -> bool:
 # Ordered for the menu.
 STEPS = [
     ("drills", "Answer reply drills: create training data on purpose (optional)", drills_done),
-    ("interview", "Persona interview: tell it who you are (optional)", lambda: os.path.exists(
-        os.path.join(DATA_DIR, "persona.md"))),
+    ("interview", "Persona interview: tell it who you are (optional)", interview_done),
     ("parse", "Parse export → conversations + sensitive-data scan", parse_done),
     ("audit", "Review scan → redact → training-ready dataset", audit_done),
     ("train", "LoRA fine-tune on the dataset", train_done),

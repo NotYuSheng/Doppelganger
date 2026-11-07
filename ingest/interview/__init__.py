@@ -56,47 +56,65 @@ TOPICS: List[Topic] = [
     Topic("intro", "About you",
           "To start: what should I call you, and how would you describe yourself in a couple of sentences?",
           ["How do you think your friends would describe you?",
-           "What's something about you that people usually don't guess?"],
+           "What's something about you that people usually don't guess?",
+           "What's a typical thing you'd say when you're excited about something?",
+           "What's a nickname people call you, if any?"],
           "name, age range or life stage, personality in their own words"),
     Topic("work", "Work or study",
           "What do you spend your days doing: work, study, or something else? What's it actually like?",
           ["What's the best and the most annoying part of it?",
-           "How would you explain what you do to someone who's never heard of it?"],
+           "How would you explain what you do to someone who's never heard of it?",
+           "What's something about your work that people get wrong?",
+           "What did you want to be when you were younger?"],
           "what they do, what they like and dislike, jargon they use"),
     Topic("people", "The people in your life",
           "Who are the people you talk to most? Tell me a bit about them.",
           ["How is the way you talk to your family different from your friends or colleagues?",
-           "Who do you text the most, and what do you usually talk about?"],
+           "Who do you text the most, and what do you usually talk about?",
+           "Who would you call first with big news, and why them?",
+           "How do you usually keep in touch with people far away?"],
           "key relationships, names and roles, how their tone changes per person"),
     Topic("week", "Where you live and your week",
           "Where do you live, and what does a normal week look like for you?",
           ["What's your favourite part of the week?",
-           "What do you usually do to unwind?"],
+           "What do you usually do to unwind?",
+           "What does a perfect weekend look like?",
+           "What's a small routine you'd hate to give up?"],
           "place, routine, habits, favourite spots"),
     Topic("interests", "Interests",
           "What are you into lately: hobbies, shows, music, games, food, anything?",
           ["How did you get into that?",
-           "What would you recommend to a friend right now, and why?"],
+           "What would you recommend to a friend right now, and why?",
+           "What's something you could talk about for hours?",
+           "What's a recent favourite: a show, song, place or meal?"],
           "hobbies, tastes, things they recommend, how they talk about them"),
     Topic("opinions", "Opinions",
           "What's something you have strong opinions about?",
           ["What's an unpopular opinion you hold?",
-           "What's something you've changed your mind about?"],
+           "What's something you've changed your mind about?",
+           "What's a hill you'd die on, even if it's silly?",
+           "What's overrated, in your view?"],
           "opinions, hot takes, how they argue a point"),
     Topic("values", "What matters to you",
           "What matters most to you in life right now?",
           ["What's something you won't compromise on?",
-           "What are you working towards at the moment?"],
+           "What are you working towards at the moment?",
+           "What do you admire most in other people?",
+           "What would you like to be doing a few years from now?"],
           "values, goals, priorities, boundaries"),
     Topic("style", "How you text",
           "How would you describe the way you text? Anything people tease you about: emoji, slang, punctuation, typos?",
           ["What's a word or phrase you use all the time?",
-           "How do you usually react when a friend shares good news?"],
+           "How do you usually react when a friend shares good news?",
+           "How do you reply when you don't want to do something someone asked?",
+           "What does your texting look like when you're annoyed?"],
           "texting habits, catchphrases, emoji, humour, how they react"),
     Topic("story", "A recent story",
           "Tell me about something memorable that happened to you recently.",
           ["How did you feel about it?",
-           "Who did you tell first, and what did you say?"],
+           "Who did you tell first, and what did you say?",
+           "What's a funny thing that happened to you lately?",
+           "What's a moment you were proud of recently?"],
           "a story told in their own voice, emotions, details"),
 ]
 
@@ -207,8 +225,11 @@ _NOT_IN_CARD = {"story"}
 
 
 def fallback_card(turns: Sequence[dict], drills_path: str = ELICITED_PATH) -> str:
-    """A persona card without an LLM: the answers by topic, plus measured style."""
+    """A persona card without an LLM: the answers by topic, plus measured style.
+    Returns "" if no answer belongs in a card yet."""
     by_topic = transcript([t for t in turns if t.get("topic") not in _NOT_IN_CARD])
+    if not by_topic:
+        return ""
     labels = {t.id: t.label for t in TOPICS}
     out = ["You are role-playing a real person in a text conversation. Reply exactly as "
            "they would, in their voice. Use only the facts below; if asked about something "
@@ -260,15 +281,20 @@ def interview_text(turns: Sequence[dict]) -> str:
     return "\n".join(blocks)
 
 
+def has_card_material(turns: Sequence[dict]) -> bool:
+    """Whether any answered topic belongs in the card (stories alone don't)."""
+    return any(t.get("topic") not in _NOT_IN_CARD for t in turns)
+
+
 def llm_card(turns: Sequence[dict], client, model: str, drills_path: str = ELICITED_PATH) -> str:
+    """The card written by an LLM, or "" if it returned nothing usable."""
+    from ingest import llm
     style = style_section(_user_texts(turns, drills_path)) or ["(not enough answers to measure)"]
     prompt = CARD_PROMPT.format(interview=interview_text(turns), style="\n".join(f"- {s}" for s in style))
-    resp = client.chat.completions.create(model=model, temperature=0.2,
-                                          messages=[{"role": "user", "content": prompt}])
-    card = (resp.choices[0].message.content or "").strip()
+    card = llm.chat(client, model, prompt, max_tokens=900, temperature=0.2)
     if card.startswith("```"):
         card = card.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-    return card + "\n"
+    return card + "\n" if card.strip() else ""
 
 
 def write_card(card: str, path: str = PERSONA_PATH) -> None:
@@ -300,12 +326,10 @@ is well covered, reply with exactly NEXT. Output only the question (or NEXT)."""
 
 def llm_follow_up(topic: Topic, so_far: Sequence[dict], client, model: str) -> Optional[str]:
     """The next follow-up question, or None when the topic is covered."""
+    from ingest import llm
     history = "\n".join(f"Q: {t['question']}\nA: " + " / ".join(t["reply"]) for t in so_far)
-    resp = client.chat.completions.create(
-        model=model, temperature=0.7,
-        messages=[{"role": "user", "content": FOLLOW_UP_PROMPT.format(
-            label=topic.label, focus=topic.focus, so_far=history)}])
-    question = (resp.choices[0].message.content or "").strip().strip('"')
+    question = llm.chat(client, model, FOLLOW_UP_PROMPT.format(
+        label=topic.label, focus=topic.focus, so_far=history), max_tokens=80, temperature=0.7).strip('"')
     if not question or question.upper().startswith("NEXT"):
         return None
     return question.splitlines()[0][:300]

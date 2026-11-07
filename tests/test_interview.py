@@ -137,6 +137,77 @@ class SessionTest(unittest.TestCase):
         self.assertNotIn("**A recent story**", card)  # stories are training data, not card
 
 
+class ReviewRegressionTest(unittest.TestCase):
+    def _run(self, inputs, d, **kw):
+        from doppelganger import interview
+        path, card = os.path.join(d, "e.jsonl"), os.path.join(d, "persona.md")
+        kw.setdefault("access", (None, None, "offline"))
+        rc, out = _quiet(interview.run_session, path=path, persona_path=card,
+                         input_fn=_feed(*inputs), **kw)
+        return rc, out, iv.load_turns(path), iv.load_card(card)
+
+    def test_half_typed_answer_saved_before_a_command(self):
+        with tempfile.TemporaryDirectory() as d:
+            _, _, turns, _ = self._run(["line one", "line two", "/stop"], d, depth="short")
+            _, _, turns2, _ = self._run(["partial", KeyboardInterrupt()], d, depth="short")
+        self.assertEqual(turns[0]["reply"], ["line one", "line two"])
+        self.assertEqual(turns2[-1]["reply"], ["partial"])
+
+    def test_deep_offline_really_asks_more(self):
+        with tempfile.TemporaryDirectory() as d:
+            _, _, turns, _ = self._run(["a", ""] * 5 + ["/stop"], d, depth="deep")
+        self.assertEqual(len(turns), 5)
+        self.assertTrue(all(t["topic"] == "intro" for t in turns))
+
+    def test_ctrl_c_during_llm_follow_up_finishes_cleanly(self):
+        def interrupt(prompt):
+            if "Ask ONE short" in prompt:
+                raise KeyboardInterrupt
+            return "You are Alex."
+        with tempfile.TemporaryDirectory() as d:
+            rc, out, turns, card = self._run(["alex", ""], d, depth="standard",
+                                             access=(FakeClient(interrupt), "m", "llm"))
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(card, "You are Alex.")
+
+    def test_empty_llm_card_falls_back(self):
+        from doppelganger import interview
+        with tempfile.TemporaryDirectory() as d:
+            path, card_path = os.path.join(d, "e.jsonl"), os.path.join(d, "p.md")
+            iv.save_turn(iv.TOPICS[0], iv.TOPICS[0].question, ["i'm alex"], path)
+            card, out = _quiet(interview.make_card, path, card_path, FakeClient("```\n```"), "m")
+        self.assertIn("i'm alex", card)
+        self.assertIn("empty card", out)
+
+    def test_story_only_makes_no_card_and_card_flag_explains(self):
+        from doppelganger import interview
+        story = next(t for t in iv.TOPICS if t.id == "story")
+        with tempfile.TemporaryDirectory() as d:
+            path, card_path = os.path.join(d, "e.jsonl"), os.path.join(d, "p.md")
+            iv.save_turn(story, story.question, ["went hiking"], path)
+            card, _ = _quiet(interview.make_card, path, card_path)
+            self.assertIsNone(card)
+            self.assertFalse(os.path.exists(card_path))
+            with mock.patch.dict(os.environ, {"LLM_MODEL": ""}):
+                rc, out = _quiet(interview.build_card, False, os.path.join(d, "none.jsonl"), card_path)
+        self.assertEqual(rc, 1)
+        self.assertIn("No interview answers", out)
+
+    def test_follow_ups_keep_their_context_in_training_data(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "e.jsonl")
+            t = iv.TOPICS[4]  # interests
+            iv.save_turn(t, t.question, ["bouldering"], path)
+            iv.save_turn(t, "How did you get into that?", ["a friend dragged me along"], path)
+            iv.save_turn(iv.TOPICS[5], iv.TOPICS[5].question, ["tabs > spaces"], path)
+            msgs, _ = _quiet(get_adapter("elicited").parse, path)
+        samples = [[x["text"] for x in s] for s in core.build_samples(msgs)]
+        self.assertIn([t.question, "bouldering", "How did you get into that?", "a friend dragged me along"],
+                      samples)
+        self.assertEqual(len(samples), 2)
+
+
 class CardTest(unittest.TestCase):
     def _turns(self, d):
         path = os.path.join(d, "e.jsonl")
@@ -215,9 +286,8 @@ class WiringTest(unittest.TestCase):
                     mock.patch.object(iv, "PERSONA_PATH", card):
                 _quiet(steps.chat)
                 _quiet(steps.chat, persona=False)
-        self.assertIn("--default_system", calls[0])
-        self.assertEqual(calls[0][calls[0].index("--default_system") + 1], "You are Alex.")
-        self.assertNotIn("--default_system", calls[1])
+        self.assertIn("--default_system=You are Alex.", calls[0])  # one token: safe if it starts with "-"
+        self.assertFalse(any(a.startswith("--default_system") for a in calls[1]))
 
     def test_eval_generate_persona_flag(self):
         from doppelganger import eval_menu

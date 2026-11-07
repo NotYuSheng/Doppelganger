@@ -20,20 +20,22 @@ _HOWTO = (
 _STOP, _NEXT, _SKIP = "stop", "next", "skip"
 
 
-def _read_answer(input_fn: Callable[[str], str]):
-    """Lines of an answer until an empty line, or one of the commands."""
+def _read_answer(input_fn: Callable[[str], str]) -> Tuple[List[str], Optional[str]]:
+    """``(lines, command)``. Lines typed before a command (or Ctrl-C / end of
+    input) are kept, so a half-finished answer is still saved. ``command`` is
+    None (answer sent), "skip", "next" or "stop"."""
     lines: List[str] = []
     while True:
         try:
             line = input_fn(f"{AMBER}you ›{RESET} " if not lines else f"{DIM}    ›{RESET} ")
         except (EOFError, KeyboardInterrupt):
             print()
-            return _STOP
+            return lines, _STOP
         cmd = line.strip().lower()
         if cmd in ("/stop", "/next", "/skip"):
-            return cmd[1:]
+            return lines, cmd[1:]
         if not line.strip():
-            return lines or _SKIP
+            return lines, (None if lines else _SKIP)
         lines.append(line.rstrip())
 
 
@@ -72,19 +74,35 @@ def _ask(question: str, input_fn) -> object:
 
 def make_card(path: str = iv.ELICITED_PATH, persona_path: str = iv.PERSONA_PATH,
               client=None, model: Optional[str] = None) -> Optional[str]:
-    """Write the persona card from the transcript; returns it (or None)."""
+    """Write the persona card from the transcript; returns it, or None if
+    there's nothing that belongs in a card yet (no file is written then)."""
     turns = iv.load_turns(path)
-    if not turns:
+    if not iv.has_card_material(turns):
         return None
-    card = None
+    card = ""
     if client is not None:
         try:
             card = iv.llm_card(turns, client, model, drills_path=path)
+            if not card:
+                print(f"{DIM}The LLM returned an empty card; using the plain version.{RESET}")
         except Exception as e:  # endpoint down, bad model, …: fall back, never lose the card
             print(f"{DIM}Couldn't write the card with the LLM ({e}); using the plain version.{RESET}")
     card = card or iv.fallback_card(turns, drills_path=path)
+    if not card.strip():
+        return None
     iv.write_card(card, persona_path)
     return card
+
+
+def build_card(allow_cloud: bool = False, path: str = iv.ELICITED_PATH,
+               persona_path: str = iv.PERSONA_PATH) -> int:
+    """``interview --card``: rebuild the card from saved answers."""
+    client, model, note = llm_access(allow_cloud)
+    print(note)
+    if not iv.has_card_material(iv.load_turns(path)):
+        print("No interview answers to build a card from yet. Run: python -m doppelganger interview")
+        return 1
+    return _finish(path, persona_path, client, model, answered=None)
 
 
 def run_session(
@@ -110,7 +128,7 @@ def run_session(
             return 0
         if pick == 0:
             client, model, note = access or llm_access(allow_cloud)
-            return _finish(path, persona_path, client, model, answered=0)
+            return _finish(path, persona_path, client, model, answered=None)
         remaining = list(iv.TOPICS)
 
     if depth is None:
@@ -134,20 +152,23 @@ def run_session(
         question: Optional[str] = topic.question
         asked = 0
         while question:
-            answer = _ask(question, input_fn)
-            if answer == _STOP:
-                return _finish(path, persona_path, client, model, answered)
-            if answer == _NEXT:
-                break
-            if answer != _SKIP:
-                so_far.append(iv.save_turn(topic, question, answer, path))
+            lines, command = _ask(question, input_fn)
+            if lines:  # saved even if a command followed (e.g. typed text then /stop)
+                so_far.append(iv.save_turn(topic, question, lines, path))
                 answered += 1
+            if command == _STOP:
+                return _finish(path, persona_path, client, model, answered)
+            if command == _NEXT:
+                break
             if asked >= follow_ups:
                 break
             question, use_fixed = None, client is None or not so_far
             if not use_fixed:
                 try:
                     question = iv.llm_follow_up(topic, so_far, client, model)  # None = topic covered
+                except KeyboardInterrupt:  # Ctrl-C while the LLM is thinking: stop cleanly
+                    print()
+                    return _finish(path, persona_path, client, model, answered)
                 except Exception:
                     print(f"{DIM}LLM follow-up failed; using a fixed question.{RESET}")
                     use_fixed = True
@@ -157,9 +178,13 @@ def run_session(
     return _finish(path, persona_path, client, model, answered)
 
 
-def _finish(path, persona_path, client, model, answered: int) -> int:
-    print(f"\nSaved {answered} answer(s).")
+def _finish(path, persona_path, client, model, answered: Optional[int]) -> int:
+    if answered is not None:
+        print(f"\nSaved {answered} answer(s).")
     card = make_card(path, persona_path, client, model)
+    if not card:
+        print("No persona card yet: answer at least one topic besides the story.")
+        return 0
     if card:
         preview = "\n".join(card.strip().splitlines()[:8])
         print(f"\n{BOLD}Persona card{RESET} written to {persona_path}:\n{DIM}{preview}\n…{RESET}")

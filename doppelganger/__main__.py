@@ -159,9 +159,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "interview":
         from doppelganger import interview
         if args.card:
-            client, model, note = interview.llm_access(args.allow_cloud)
-            print(note)
-            return interview._finish(interview.iv.ELICITED_PATH, interview.iv.PERSONA_PATH, client, model, 0)
+            return interview.build_card(args.allow_cloud)
         return interview.run_session(depth=args.depth, allow_cloud=args.allow_cloud)
     if args.command == "drills":
         from doppelganger import drills as drill_session

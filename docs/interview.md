@@ -72,8 +72,10 @@ plain Markdown.
   that off).
 - Rebuild it any time from your answers with `interview --card`.
 
-**2. Training data.** Every question and answer becomes a training pair in your
-own words, saved to `data/elicited.jsonl` next to your [reply
+**2. Training data.** Your answers become training conversations in your own
+words: each topic's opening question, follow-ups and answers form one
+conversation, so a follow-up like "How did you get into that?" keeps the answer
+it refers to. They're saved to `data/elicited.jsonl` next to your [reply
 drills](drills.md). The next `parse` / `auto` picks them up automatically.
 
 ## Does it help? Measure it
