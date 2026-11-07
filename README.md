@@ -200,6 +200,7 @@ Tiny machine? **Qwen2.5-1.5B-Instruct** or **Llama-3.2-3B-Instruct** also work, 
 
 Fine-tuning on real chat history may unintentionally encode personal identifiers, confidential conversations, or sensitive content.
 
+> [!CAUTION]
 > **Always review and sanitize your dataset before training.** You are responsible for compliance with privacy laws and personal data protection.
 
 ### Automated sensitive-data scan
@@ -341,10 +342,6 @@ python -m unittest discover -s tests -t .
 ```
 
 It runs in well under a second and locks in the conversion behaviour, so you can verify a change without running the full pipeline.
-
-## Legacy Workflow
-
-The pre-refactor, Windows-only workflow (which cloned LLaMA-Factory at HEAD) is preserved at the [`v0.1.0`](https://github.com/NotYuSheng/Doppelganger/releases/tag/v0.1.0) tag. The old `scripts/telegram_extract.py` and `scripts/convert_to_sharegpt.py` shims have been removed — use `python -m ingest` instead.
 
 ## Roadmap & Vision
 
